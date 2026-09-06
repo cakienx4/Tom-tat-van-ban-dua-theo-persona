@@ -1,0 +1,245 @@
+{
+  "_meta": {
+    "description": "Test cases để validate 20 Competency Questions (CQ) của ontology persona. Mỗi case loại 'pair_comparison' chạy pipeline 2 lần (person A, person B) trên cùng 1 văn bản gốc rồi so sánh 2 bản tóm tắt theo expected_effect. Case loại 'single_constraint' chạy pipeline 1 lần và kiểm tra một ràng buộc cụ thể trên output (không cần so sánh cặp).",
+    "row_index": "Chỉ số dòng (0-based) trong sample50.csv, đã được xác minh thủ công khớp với mô tả person.",
+    "text_pool": "Các văn bản gốc dùng chung, tham chiếu qua text_id."
+  },
+  "texts": {
+    "TXT_NEWS_GENERAL": "Lễ hội pháo hoa quốc tế Đà Nẵng năm nay dự kiến diễn ra từ ngày 31/5 đến 12/7, với sự tham gia của 8 đội đến từ các quốc gia như Ý, Úc, Mỹ, Phần Lan và Việt Nam. Ban tổ chức cho biết lễ hội năm nay sẽ có thêm khu vực trải nghiệm ẩm thực đường phố kết hợp với các gian hàng thủ công mỹ nghệ truyền thống. Vé xem pháo hoa dao động từ 200.000 đến 800.000 đồng tùy vị trí khán đài. Ngoài ra, du khách đến từ các tỉnh thành khác có thể đặt tour trọn gói bao gồm vé máy bay, khách sạn và vé xem pháo hoa thông qua các đại lý du lịch. Ban tổ chức khuyến cáo người xem nên đến sớm ít nhất 1 tiếng để tìm chỗ đỗ xe và ổn định chỗ ngồi, đồng thời chuẩn bị áo mưa vì thời tiết tháng 6 tại Đà Nẵng thường có mưa bất chợt.",
+    "TXT_BUSINESS_MARKET": "Giá lúa gạo tại đồng bằng sông Cửu Long tuần qua biến động mạnh do nhu cầu xuất khẩu tăng cao, trong khi giá hàng tiêu dùng nhập khẩu tại các siêu thị mini đô thị lại có xu hướng giảm nhẹ nhờ tỷ giá ổn định. Các chuyên gia khuyến nghị tiểu thương ở khu vực nông thôn nên theo dõi sát giá thu mua tại các kênh phân phối truyền thống, trong khi các cửa hàng kinh doanh ở thành phố lớn cần đẩy mạnh kênh thương mại điện tử và logistics để cạnh tranh. Báo cáo cũng chỉ ra xu hướng người tiêu dùng trẻ ngày càng ưu tiên đặt hàng online, đặt ra thách thức cho mô hình bán lẻ truyền thống tại các chợ và tiệm tạp hóa.",
+    "TXT_TECH_DESIGN": "Xu hướng thiết kế giao diện năm nay tập trung vào phong cách tối giản, sử dụng nhiều khoảng trắng và bảng màu trung tính. Đối với người mới bắt đầu, bài viết hướng dẫn từng bước cách mở phần mềm thiết kế, làm quen với các công cụ cơ bản như bút vẽ, lớp (layer) và cách xuất file. Đối với các nhà thiết kế đã có kinh nghiệm, bài viết phân tích sâu hơn về cách phối hợp typography với chuyển động (motion design) để tạo ra trải nghiệm người dùng liền mạch, đồng thời so sánh các xu hướng thiết kế nổi bật tại các công ty công nghệ lớn trong năm nay.",
+    "TXT_HEALTH_SPORT": "Các bác sĩ khuyến nghị người trưởng thành nên duy trì ít nhất 150 phút vận động cường độ vừa mỗi tuần để bảo vệ tim mạch. Đối với người mới bắt đầu tập luyện, nên khởi động kỹ và chọn các bài tập nhẹ nhàng như đi bộ hoặc yoga trước khi tăng dần cường độ. Đối với vận động viên hoặc người tập luyện thường xuyên, bài viết đề cập đến chế độ dinh dưỡng thể thao chuyên sâu, tỷ lệ protein - carb sau buổi tập, và kỹ thuật phục hồi cơ bắp bằng phương pháp lăn cơ (foam rolling) để tối ưu hiệu suất luyện tập dài hạn.",
+    "TXT_TRAVEL_CULTURE": "Miền Tây Nam Bộ đang vào mùa nước nổi, thu hút du khách đến trải nghiệm chợ nổi Cái Răng, thưởng thức đặc sản địa phương tại các quán ăn vỉa hè ven sông. Bên cạnh đó, nhiều công ty lữ hành cũng giới thiệu các tour cao cấp kết hợp nghỉ dưỡng tại resort 5 sao với dịch vụ trọn gói, phù hợp cho du khách muốn trải nghiệm sang trọng. Du khách có thể lựa chọn giữa việc tự túc khám phá bằng xe máy để cảm nhận nhịp sống bản địa, hoặc đặt tour có hướng dẫn viên đưa đón tận nơi.",
+    "TXT_ARTS_CULTURE": "Triển lãm mỹ thuật đương đại vừa khai mạc tại trung tâm nghệ thuật thành phố, quy tụ hơn 30 tác phẩm của các họa sĩ trẻ. Bài viết giới thiệu tổng quan về sự kiện, đồng thời phân tích sâu kỹ thuật sơn dầu lớp (layering), cách phối màu tương phản và ảnh hưởng của trường phái biểu hiện trừu tượng lên các tác phẩm được trưng bày. Sự kiện mở cửa miễn phí cho công chúng và có khu vực trải nghiệm vẽ tranh cho trẻ em.",
+    "TXT_FAMILY_TRAVEL": "Mùa hè này, nhiều gia đình lựa chọn các điểm đến có khu vui chơi an toàn cho trẻ nhỏ và dịch vụ đưa đón tiện lợi, trong khi nhóm du khách trẻ độc thân lại ưu tiên các điểm đến năng động, có nhiều hoạt động trải nghiệm cá nhân như leo núi, lặn biển hoặc tham gia lễ hội âm nhạc. Các công ty lữ hành cho biết xu hướng đặt tour theo nhóm gia đình tăng 20% so với năm ngoái, trong khi tour cá nhân hóa cho khách độc thân cũng ghi nhận mức tăng trưởng ổn định.",
+    "TXT_HEALTH_FAMILY": "Bài viết tổng hợp các khuyến nghị sức khỏe theo độ tuổi và giới tính: nam giới trung niên nên chú ý tầm soát tim mạch và tuyến tiền liệt định kỳ, trong khi nữ giới cùng độ tuổi cần quan tâm đến sức khỏe xương khớp và tầm soát ung thư vú. Cả hai giới đều được khuyến nghị duy trì chế độ ăn cân bằng và khám sức khỏe tổng quát mỗi năm một lần.",
+    "TXT_FOREIGN_POLICY": "Chính sách thuế nhập khẩu mới của Liên minh châu Âu (EU) áp dụng từ quý tới sẽ tác động đến chuỗi cung ứng hàng tiêu dùng tại nhiều quốc gia thành viên. Bên cạnh đó, đạo luật bảo vệ dữ liệu cá nhân mới tại bang California, Mỹ, cũng đặt ra các yêu cầu nghiêm ngặt hơn cho doanh nghiệp công nghệ hoạt động tại thị trường này. Các chuyên gia khuyến nghị doanh nghiệp tại các quốc gia trên cần rà soát lại quy trình tuân thủ trước thời hạn áp dụng.",
+    "TXT_VALUES_GENERIC": "Một khảo sát gần đây cho thấy nhiều người đang tìm cách cân bằng giữa công việc và cuộc sống cá nhân, ưu tiên thời gian cho gia đình và sở thích riêng. Bài viết tổng hợp các số liệu về xu hướng làm việc từ xa, mức độ hài lòng trong công việc, đồng thời chia sẻ một số câu chuyện truyền cảm hứng về việc theo đuổi đam mê song song với sự nghiệp ổn định.",
+    "TXT_TET_FESTIVAL": "Tết Nguyên Đán năm nay, nhiều gia đình tại các đô thị lớn vẫn giữ phong tục thắp hương, gói bánh chưng và đi chùa đầu năm, trong khi một bộ phận giới trẻ thành thị lựa chọn đi du lịch nước ngoài hoặc tổ chức tiệc Tết theo phong cách hiện đại. Các trung tâm thương mại năm nay cũng kết hợp trang trí truyền thống với các hoạt động giải trí mới để thu hút cả khách hàng lớn tuổi lẫn giới trẻ.",
+    "TXT_REGIONAL_AGRI": "Nông nghiệp Việt Nam đang chuyển dịch theo hướng công nghệ cao ở nhiều vùng miền. Tại đồng bằng sông Cửu Long, nông dân áp dụng mô hình canh tác thông minh để thích ứng với xâm nhập mặn, trong khi tại khu vực miền Trung và Tây Nguyên, các mô hình nông nghiệp kết hợp du lịch sinh thái đang phát triển mạnh, thu hút du khách đến trải nghiệm thu hoạch nông sản trực tiếp tại vườn.",
+    "TXT_CULINARY_TASTE": "Ẩm thực đường phố Việt Nam tiếp tục là điểm nhấn thu hút du khách quốc tế, từ các gánh hàng rong bình dân đến những quán ăn gia truyền lâu đời. Bên cạnh đó, làn sóng nhà hàng fine-dining theo phong cách hiện đại kết hợp nguyên liệu bản địa cũng đang nở rộ tại các thành phố lớn, mang đến trải nghiệm ẩm thực cao cấp với giá thành tương xứng.",
+    "TXT_HOBBY_CULINARY": "Phong trào học nấu ăn tại nhà đang phát triển mạnh, từ các lớp học truyền thống dạy công thức gia truyền vùng miền đến các khóa học trực tuyến ngắn hạn dành cho người mới bắt đầu chỉ muốn nấu được vài món cơ bản. Bài viết giới thiệu chi tiết quy trình làm một số món ăn truyền thống cầu kỳ, đồng thời gợi ý các công thức nhanh gọn cho người bận rộn."
+  },
+  "test_cases": [
+    {
+      "cq_id": "CQ1",
+      "question": "Trình độ học vấn của người dùng có ảnh hưởng đến độ phức tạp ngôn ngữ trong bản tóm tắt không?",
+      "field_under_test": "education_level (HARD)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 2, "label": "Bà Nga - Không học vấn, 88 tuổi"},
+      "person_b": {"row_index": 40, "label": "Oanh - Sau đại học, nhà nghiên cứu"},
+      "text_id": "TXT_NEWS_GENERAL",
+      "expected_effect": "Tóm tắt cho Bà Nga dùng câu ngắn, từ ngữ đời thường, không thuật ngữ; tóm tắt cho Oanh có thể dùng câu phức tạp hơn, lập luận nhiều tầng hơn rõ rệt.",
+      "judge_question": "So sánh độ phức tạp ngôn ngữ (độ dài câu, mức độ dùng thuật ngữ, số tầng lập luận) giữa bản tóm tắt A và B. Bản A có đơn giản hơn bản B một cách rõ rệt không?"
+    },
+    {
+      "cq_id": "CQ2",
+      "question": "Nghề nghiệp và lĩnh vực làm việc của người dùng có quyết định chủ đề văn bản nào được ưu tiên tóm tắt không?",
+      "field_under_test": "occupation + professional_persona (HARD)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 5, "label": "Minh - Buôn bán lúa gạo"},
+      "person_b": {"row_index": 38, "label": "Dương Xuân Hiếu - Y tế / dược"},
+      "text_id": "TXT_NEWS_GENERAL",
+      "expected_effect": "Tóm tắt cho Minh nhấn vào giá vé, chi phí, cơ hội kinh doanh dịch vụ du lịch quanh lễ hội; tóm tắt cho Hiếu có thể trung lập hơn hoặc nhấn khía cạnh khác (không nhất thiết nhấn kinh doanh).",
+      "judge_question": "Bản tóm tắt A có nhấn mạnh các khía cạnh giá cả/kinh doanh/thị trường rõ rệt hơn bản B không, phù hợp với nghề buôn bán của person A?"
+    },
+    {
+      "cq_id": "CQ3",
+      "question": "Độ tuổi của người dùng có làm thay đổi chủ đề được nhấn mạnh trong bản tóm tắt không?",
+      "field_under_test": "age (HARD)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 33, "label": "Phương Hạnh - 21 tuổi, thất nghiệp tìm việc"},
+      "person_b": {"row_index": 2, "label": "Bà Nga - 88 tuổi, nghỉ hưu"},
+      "text_id": "TXT_HEALTH_SPORT",
+      "expected_effect": "Tóm tắt cho Phương Hạnh (trẻ) có thể nhấn cơ hội/khởi đầu tập luyện cơ bản; tóm tắt cho Bà Nga nhấn mạnh khía cạnh sức khỏe, vận động nhẹ nhàng, an toàn cho người lớn tuổi.",
+      "judge_question": "Bản tóm tắt B (người cao tuổi) có thiên về nội dung sức khỏe/an toàn/vận động nhẹ nhàng rõ rệt hơn bản A không?"
+    },
+    {
+      "cq_id": "CQ4",
+      "question": "Khu vực sống (Đô Thị/Nông Thôn) có làm thay đổi phần nào của văn bản được giữ lại trong tóm tắt không?",
+      "field_under_test": "zone (SOFT, bổ trợ)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 34, "label": "Chị Mai - Buôn bán, Nông Thôn, Đà Nẵng"},
+      "person_b": {"row_index": 41, "label": "Phạm Thị Thảo - Buôn bán, Đô Thị, TP.HCM"},
+      "text_id": "TXT_BUSINESS_MARKET",
+      "expected_effect": "Tóm tắt cho Chị Mai (nông thôn) giữ lại phần giá nông sản/kênh phân phối truyền thống; tóm tắt cho Thảo (đô thị) giữ lại phần thương mại điện tử/logistics.",
+      "judge_question": "Bản tóm tắt A có nhấn vào nông sản/kênh truyền thống còn bản B nhấn vào thương mại điện tử/logistics đô thị không?"
+    },
+    {
+      "cq_id": "CQ5",
+      "question": "Sở thích cá nhân có đủ để xác định góc độ tóm tắt phù hợp không, hay cần kết hợp với education_level?",
+      "field_under_test": "hobbies_and_interests (SOFT) + education_level (HARD)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 12, "label": "Lê Văn Dung - Công nhân, Trung cấp/Cao đẳng"},
+      "person_b": {"row_index": 38, "label": "Dương Xuân Hiếu - Y tế/dược, Sau đại học"},
+      "text_id": "TXT_HEALTH_SPORT",
+      "expected_effect": "Dù cả hai đều có liên quan đến thể thao trong hồ sơ, văn phong tóm tắt cho A vẫn đơn giản hơn B do chênh lệch education_level, chứng tỏ hobbies không tự quyết định toàn bộ cách diễn đạt.",
+      "judge_question": "Mặc dù chủ đề thể thao xuất hiện ở cả hai, bản tóm tắt B có phức tạp hơn bản A về ngôn ngữ/lập luận do trình độ học vấn khác biệt không?"
+    },
+    {
+      "cq_id": "CQ6",
+      "question": "Mục tiêu nghề nghiệp có làm tăng mức độ ưu tiên của nội dung mang tính định hướng tương lai (xu hướng thị trường, cơ hội đầu tư) trong tóm tắt không?",
+      "field_under_test": "career_goals_and_ambitions (GENERAL)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 39, "label": "Trần Thùy Thảo - muốn mở rộng kinh doanh ra quốc tế"},
+      "person_b": {"row_index": 5, "label": "Minh - mong muốn ổn định, ít tham vọng mở rộng"},
+      "text_id": "TXT_BUSINESS_MARKET",
+      "expected_effect": "Tóm tắt cho Thảo giữ lại phần xu hướng thị trường/thương mại điện tử (cơ hội mở rộng); tóm tắt cho Minh thiên về mô tả hiện trạng giá cả ổn định, ít nhấn cơ hội mở rộng.",
+      "judge_question": "Bản tóm tắt A (Thảo) có nhấn mạnh xu hướng/cơ hội phát triển kinh doanh rõ rệt hơn bản B (Minh) không?"
+    },
+    {
+      "cq_id": "CQ7",
+      "question": "Tình trạng hôn nhân có làm thay đổi góc độ được nhấn mạnh khi tóm tắt văn bản về gia đình/du lịch không?",
+      "field_under_test": "marital_status (SOFT)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 18, "label": "Huỳnh Thanh Hoa - Đã kết hôn"},
+      "person_b": {"row_index": 23, "label": "Đỗ Thanh Hương - Ly thân"},
+      "text_id": "TXT_FAMILY_TRAVEL",
+      "expected_effect": "Tóm tắt cho Hoa (đã kết hôn) nhấn vào điểm đến phù hợp gia đình/trẻ nhỏ; tóm tắt cho Hương (ly thân) nhấn vào trải nghiệm cá nhân/độc lập.",
+      "judge_question": "Bản tóm tắt A có thiên về nội dung phù hợp gia đình còn bản B thiên về trải nghiệm cá nhân/độc thân không?"
+    },
+    {
+      "cq_id": "CQ8",
+      "question": "Kỹ năng hiện có của người dùng có tác động loại bỏ phần hướng dẫn cơ bản (nhập môn) trong tóm tắt không?",
+      "field_under_test": "skills_and_expertise (HARD)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 15, "label": "Anh Dũng - Freelance designer nhiều năm kinh nghiệm"},
+      "person_b": {"row_index": 12, "label": "Lê Văn Dung - Công nhân, kỹ năng cơ bản"},
+      "text_id": "TXT_TECH_DESIGN",
+      "expected_effect": "Tóm tắt cho Anh Dũng (thiết kế chuyên sâu) lược bỏ phần hướng dẫn cơ bản (mở phần mềm, công cụ cơ bản), chỉ giữ phần nâng cao (typography, motion design); tóm tắt cho Lê Văn Dung có thể giữ lại nhiều hơn hoặc trình bày khác do không có nền tảng thiết kế.",
+      "judge_question": "Bản tóm tắt A có lược bỏ rõ rệt phần hướng dẫn nhập môn/cơ bản về thiết kế so với bản B không?"
+    },
+    {
+      "cq_id": "CQ9",
+      "question": "Vùng địa lý cư trú có làm tăng mức độ ưu tiên của nội dung địa phương trong tóm tắt không?",
+      "field_under_test": "region (GENERAL)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 43, "label": "Cô (Cần Thơ) - Buôn bán, gắn với chợ nổi miền Tây"},
+      "person_b": {"row_index": 40, "label": "Oanh - Hải Phòng, vùng đồng bằng sông Hồng"},
+      "text_id": "TXT_REGIONAL_AGRI",
+      "expected_effect": "Tóm tắt cho person A giữ lại phần đồng bằng sông Cửu Long/canh tác thông minh nhiều hơn; tóm tắt cho person B có thể giữ phần miền Trung/Tây Nguyên hoặc trung lập hơn nhưng không loại bỏ hoàn toàn nội dung vùng khác.",
+      "judge_question": "Bản tóm tắt A có ưu tiên rõ rệt nội dung về đồng bằng sông Cửu Long hơn bản B không, trong khi cả hai vẫn còn giữ phần thông tin chung?"
+    },
+    {
+      "cq_id": "CQ10",
+      "question": "Phong cách du lịch (travel_persona) có làm thay đổi phần nào của văn bản ẩm thực được giữ lại trong tóm tắt không?",
+      "field_under_test": "travel_persona (SOFT)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 39, "label": "Trần Thùy Thảo - thích khám phá thiên nhiên/địa phương"},
+      "person_b": {"row_index": 23, "label": "Đỗ Thanh Hương - thích điểm đến lịch sử/văn hóa, fine-dining"},
+      "text_id": "TXT_CULINARY_TASTE",
+      "expected_effect": "Tóm tắt cho Thảo giữ lại phần ẩm thực đường phố/gánh hàng rong bình dân; tóm tắt cho Hương giữ lại phần nhà hàng fine-dining cao cấp.",
+      "judge_question": "Bản tóm tắt A có nhấn vào ẩm thực đường phố bình dân còn bản B nhấn vào fine-dining cao cấp không?"
+    },
+    {
+      "cq_id": "CQ11",
+      "question": "Người dùng có nghề nghiệp sáng tạo thì bản tóm tắt về văn hóa nghệ thuật có cần giữ lại phần kỹ thuật chuyên môn không?",
+      "field_under_test": "occupation/professional_persona (HARD) x arts_persona (SOFT)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 15, "label": "Anh Dũng - Freelance designer (nghề sáng tạo)"},
+      "person_b": {"row_index": 12, "label": "Lê Văn Dung - Công nhân/lao động phổ thông"},
+      "text_id": "TXT_ARTS_CULTURE",
+      "expected_effect": "Tóm tắt cho Anh Dũng giữ lại phần phân tích kỹ thuật (lớp màu, phối màu, trường phái); tóm tắt cho Lê Văn Dung chỉ giữ phần giới thiệu sự kiện và cảm nhận tổng thể.",
+      "judge_question": "Bản tóm tắt A có giữ lại chi tiết kỹ thuật nghệ thuật (kỹ thuật, trường phái) rõ rệt hơn bản B không?"
+    },
+    {
+      "cq_id": "CQ12",
+      "question": "Mức độ tham gia thể thao có quyết định phần nào của văn bản sức khỏe được ưu tiên trong tóm tắt không?",
+      "field_under_test": "sports_persona (SOFT)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 8, "label": "Phương Chi - năng động, tập bóng bàn/đi bộ thường xuyên"},
+      "person_b": {"row_index": 2, "label": "Bà Nga - chỉ tập nhẹ nhàng, dưỡng sinh"},
+      "text_id": "TXT_HEALTH_SPORT",
+      "expected_effect": "Tóm tắt cho Phương Chi có thể giữ phần dinh dưỡng thể thao/phục hồi cơ chuyên sâu hơn; tóm tắt cho Bà Nga giữ phần khuyến nghị sức khỏe cơ bản, vận động nhẹ.",
+      "judge_question": "Bản tóm tắt A có nhấn vào nội dung tập luyện/dinh dưỡng chuyên sâu hơn còn bản B nhấn vào khuyến nghị sức khỏe cơ bản, nhẹ nhàng không?"
+    },
+    {
+      "cq_id": "CQ13",
+      "question": "Giới tính có làm thay đổi góc độ ưu tiên trong tóm tắt khi văn bản đề cập đến nhiều nhóm đối tượng không?",
+      "field_under_test": "sex",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 17, "label": "Trần Văn Hải - Nam, 48 tuổi"},
+      "person_b": {"row_index": 1, "label": "Chị Linh - Nữ, 45 tuổi"},
+      "text_id": "TXT_HEALTH_FAMILY",
+      "expected_effect": "Tóm tắt cho Hải giữ lại phần khuyến nghị dành cho nam giới (tim mạch, tuyến tiền liệt); tóm tắt cho Linh giữ lại phần dành cho nữ giới (xương khớp, tầm soát ung thư vú).",
+      "judge_question": "Bản tóm tắt A có ưu tiên nội dung sức khỏe nam giới còn bản B ưu tiên nội dung sức khỏe nữ giới không?"
+    },
+    {
+      "cq_id": "CQ14",
+      "question": "Quốc gia cư trú (cố định Việt Nam) có đóng vai trò ràng buộc cứng loại bỏ/chú thích nội dung không phù hợp ngữ cảnh Việt Nam trong tóm tắt không?",
+      "field_under_test": "country (HARD, cố định)",
+      "type": "single_constraint",
+      "note": "Không thể test bằng so sánh cặp vì country cố định là Việt Nam cho toàn bộ 50 person trong sample50.csv. Test bằng cách đưa văn bản có nội dung chính sách nước ngoài và kiểm tra pipeline có lược bỏ/chú thích đúng cách không.",
+      "person_a": {"row_index": 39, "label": "Trần Thùy Thảo - dùng làm đại diện chung"},
+      "text_id": "TXT_FOREIGN_POLICY",
+      "expected_effect": "Bản tóm tắt không trình bày chính sách thuế EU hoặc luật California như thể áp dụng trực tiếp cho người đọc tại Việt Nam; nội dung nước ngoài bị lược bỏ hoặc được chú thích rõ là không áp dụng trực tiếp.",
+      "judge_question": "Bản tóm tắt có lược bỏ hoặc chú thích rõ rằng các chính sách EU/Mỹ không áp dụng trực tiếp cho người đọc Việt Nam không, thay vì trình bày như thể áp dụng trực tiếp?"
+    },
+    {
+      "cq_id": "CQ15",
+      "question": "Giá trị sống và thế giới quan (persona) có ảnh hưởng đến văn phong và ngữ điệu của bản tóm tắt không?",
+      "field_under_test": "persona (GENERAL)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 23, "label": "Đỗ Thanh Hương - quản lý, thực dụng, tham vọng"},
+      "person_b": {"row_index": 2, "label": "Bà Nga - tận hưởng tuổi già, bình yên"},
+      "text_id": "TXT_VALUES_GENERIC",
+      "expected_effect": "Tóm tắt cho Hương súc tích, thiên về số liệu/kết luận rõ ràng; tóm tắt cho Bà Nga có thể nhẹ nhàng, gần gũi đời thường hơn.",
+      "judge_question": "Bản tóm tắt A có văn phong súc tích/thiên số liệu rõ rệt hơn, còn bản B nhẹ nhàng/đời thường hơn không?"
+    },
+    {
+      "cq_id": "CQ16",
+      "question": "Nền tảng văn hóa có làm thay đổi mức độ cộng hưởng của người dùng với cùng một văn bản không?",
+      "field_under_test": "cultural_background (GENERAL)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 2, "label": "Bà Nga - gắn bó văn hóa truyền thống Đà Nẵng (bài chòi, lễ hội)"},
+      "person_b": {"row_index": 38, "label": "Dương Xuân Hiếu - sống chung cư hiện đại, pha trộn văn hóa"},
+      "text_id": "TXT_TET_FESTIVAL",
+      "expected_effect": "Tóm tắt cho Bà Nga nhấn vào phong tục truyền thống (thắp hương, gói bánh chưng, đi chùa); tóm tắt cho Hiếu có thể giữ cả phần xu hướng hiện đại (du lịch nước ngoài, tiệc Tết hiện đại).",
+      "judge_question": "Bản tóm tắt A có nhấn mạnh phong tục truyền thống hơn, còn bản B có giữ lại phần nội dung hiện đại/quốc tế nhiều hơn không?"
+    },
+    {
+      "cq_id": "CQ17",
+      "question": "Khi trường HARD (zone, occupation) và trường SOFT (travel_persona) xung đột nhau, tóm tắt có ưu tiên theo HARD không?",
+      "field_under_test": "zone + occupation (HARD) vs travel_persona (SOFT) - quan hệ uu_tien_hon",
+      "type": "single_constraint",
+      "note": "Chị Mai có travel_persona thiên về du lịch quốc tế (Bà Nà Hills, kế hoạch đi quốc tế) nhưng zone=Nông Thôn, occupation=Buôn bán/kinh doanh là HARD. Kỳ vọng: tóm tắt ưu tiên giữ lại nội dung trong nước/chi phí hợp lý, không ưu tiên phần tour quốc tế cao cấp.",
+      "person_a": {"row_index": 34, "label": "Chị Mai - Nông Thôn/Buôn bán (HARD) nhưng travel_persona thích quốc tế (SOFT)"},
+      "text_id": "TXT_TRAVEL_CULTURE",
+      "expected_effect": "Tóm tắt giữ lại phần khám phá tự túc bằng xe máy, ẩm thực vỉa hè, chi phí hợp lý (phù hợp HARD: nông thôn, buôn bán) hơn là phần resort 5 sao/tour cao cấp (dù travel_persona SOFT có xu hướng quốc tế/cao cấp).",
+      "judge_question": "Bản tóm tắt có ưu tiên nội dung trong nước, chi phí hợp lý, tự túc hơn là nội dung resort cao cấp/quốc tế không, mặc dù travel_persona của person gợi ý thích du lịch quốc tế/cao cấp?"
+    },
+    {
+      "cq_id": "CQ18",
+      "question": "Sự kết hợp giữa nghề nghiệp và khu vực sống có tạo ra yêu cầu tóm tắt đặc thù không?",
+      "field_under_test": "occupation x zone (HARD x SOFT combo)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 5, "label": "Minh - Buôn bán, Nông Thôn"},
+      "person_b": {"row_index": 41, "label": "Phạm Thị Thảo - Buôn bán, Đô Thị"},
+      "text_id": "TXT_BUSINESS_MARKET",
+      "expected_effect": "Cùng nghề buôn bán nhưng tóm tắt cho Minh (nông thôn) giữ phần giá nông sản/kênh phân phối truyền thống; tóm tắt cho Thảo (đô thị) giữ phần thương mại điện tử/logistics.",
+      "judge_question": "Mặc dù cùng nghề buôn bán, bản tóm tắt A (nông thôn) và B (đô thị) có khác nhau rõ rệt về trọng tâm nội dung (nông sản/truyền thống vs. online/logistics) không?"
+    },
+    {
+      "cq_id": "CQ19",
+      "question": "Mức độ tham gia nghệ thuật (arts_persona) có ảnh hưởng đến khả năng tiếp nhận văn phong giàu hình ảnh/ẩn dụ trong bản tóm tắt không?",
+      "field_under_test": "arts_persona (SOFT)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 40, "label": "Oanh - đam mê hội họa, thường xuyên dự triển lãm (arts cao)"},
+      "person_b": {"row_index": 12, "label": "Lê Văn Dung - công nhân, ít liên quan nghệ thuật (arts thấp)"},
+      "text_id": "TXT_ARTS_CULTURE",
+      "expected_effect": "Tóm tắt cho Oanh có thể dùng ngôn ngữ giàu hình ảnh/ẩn dụ hơn khi mô tả triển lãm; tóm tắt cho Dung trực tiếp, tường minh hơn.",
+      "judge_question": "Bản tóm tắt A có dùng ngôn ngữ giàu hình ảnh/ẩn dụ hơn rõ rệt so với bản B (trực tiếp, tường minh) không?"
+    },
+    {
+      "cq_id": "CQ20",
+      "question": "Đam mê và sở thích cá nhân có làm tăng ngưỡng chấp nhận độ dài tóm tắt của người dùng trong chủ đề họ yêu thích không?",
+      "field_under_test": "hobbies_and_interests (SOFT)",
+      "type": "pair_comparison",
+      "person_a": {"row_index": 21, "label": "Anh Thanh - đam mê ẩm thực truyền thống lâu dài, muốn truyền nghề"},
+      "person_b": {"row_index": 33, "label": "Phương Hạnh - sở thích đa dạng, không gắn bó sâu với ẩm thực"},
+      "text_id": "TXT_HOBBY_CULINARY",
+      "expected_effect": "Tóm tắt cho Anh Thanh có thể dài hơn, giữ lại nhiều chi tiết về công thức truyền thống cầu kỳ; tóm tắt cho Phương Hạnh ngắn gọn hơn, chỉ giữ phần công thức nhanh gọn cơ bản.",
+      "judge_question": "Bản tóm tắt A có dài hơn và giữ nhiều chi tiết về ẩm thực truyền thống hơn bản B không, phản ánh đam mê sâu hơn của person A với chủ đề này?"
+    }
+  ]
+}
