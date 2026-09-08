@@ -1,16 +1,7 @@
-"""
-community.py
-Xác định community của một person dựa trên rule-based logic.
-5 chiều: Language, Topic, Domain, Cultural, Prototype
-"""
-
-# ── CHIỀU LANGUAGE ──────────────────────────────────────────────────────────
+import json
+import os
 
 def get_language(education_level: str, age: int) -> dict:
-    """
-    Suy ra từ education_level (HARD, ưu tiên cao nhất) + age (HARD, bổ trợ).
-    Trả về dict gồm level (1-4) và mô tả.
-    """
     edu_map = {
         "Không học vấn":        1,
         "Tiểu học":             1,
@@ -35,13 +26,7 @@ def get_language(education_level: str, age: int) -> dict:
     return {"level": level, "description": desc_map[level]}
 
 
-# ── CHIỀU TOPIC ──────────────────────────────────────────────────────────────
-
 def get_topic(occupation: str, age: int) -> list:
-    """
-    Suy ra từ occupation (HARD) + age (HARD, bổ trợ cho người nghỉ hưu/cao tuổi).
-    Trả về list các chủ đề ưu tiên theo thứ tự giảm dần.
-    """
     occupation_map = {
         "Buôn bán / kinh doanh":              ["Thị trường", "Giá cả", "Kinh doanh", "Tài chính"],
         "Kỹ thuật viên / kỹ sư":              ["Kỹ thuật", "Công nghệ", "Khoa học"],
@@ -68,59 +53,68 @@ def get_topic(occupation: str, age: int) -> list:
 
     return topics
 
+_DOMAIN_KEYWORDS_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "data", "domain_keywords.json"
+)
 
-# ── CHIỀU DOMAIN ─────────────────────────────────────────────────────────────
+with open(_DOMAIN_KEYWORDS_PATH, encoding="utf-8") as f:
+    _DOMAIN_DATA = json.load(f)
+
+DOMAIN_KEYWORDS   = _DOMAIN_DATA["domains"]
+KEYWORD_RELATIONS = _DOMAIN_DATA.get("keyword_relations", [])
+DOMAIN_PRIORITY   = _DOMAIN_DATA.get("domain_priority", [])
+
+DOMAIN_SCORE_THRESHOLD = 0.6   # ngưỡng để 1 domain được coi là "có liên quan"
+PRIORITY_TIE_MARGIN    = 0.15  # chênh lệch điểm coi là "gần bằng nhau" khi tie-break
+
+
+def _compute_domain_scores(skills_text: str) -> dict:
+    """
+    Tính điểm từng domain:
+    1. Cộng trọng số keyword khớp trực tiếp trong domains.
+    2. Cộng/trừ điểm bổ sung từ keyword_relations (tuong_quan/keo_theo dương,
+       kim_che âm) khi từ khóa 'from' xuất hiện trong text, tác động lên domain 'to'.
+    """
+    scores = {domain: 0.0 for domain in DOMAIN_KEYWORDS}
+
+    for domain, keyword_weights in DOMAIN_KEYWORDS.items():
+        for kw, weight in keyword_weights.items():
+            if kw in skills_text:
+                scores[domain] += weight
+
+    for rel in KEYWORD_RELATIONS:
+        kw = rel["from"]
+        target_domain = rel["to"]
+        weight = rel["weight"]
+        if kw in skills_text and target_domain in scores:
+            scores[target_domain] += weight
+
+    return scores
+
+
+def _apply_domain_priority(selected: set, scores: dict) -> set:
+    """
+    Khi 2 domain xung đột (theo domain_priority) đều đã vượt threshold và điểm
+    số gần bằng nhau (chênh lệch <= PRIORITY_TIE_MARGIN), chỉ giữ lại domain
+    được ưu tiên ('prefer'), loại domain còn lại ('over').
+    """
+    result = set(selected)
+    for rule in DOMAIN_PRIORITY:
+        prefer, over = rule["prefer"], rule["over"]
+        if prefer in result and over in result:
+            diff = abs(scores.get(prefer, 0.0) - scores.get(over, 0.0))
+            if diff <= PRIORITY_TIE_MARGIN:
+                result.discard(over)
+    return result
+
 
 def get_domain(skills_and_expertise: str, occupation: str) -> list:
-    """
-    Suy ra từ skills_and_expertise văn xuôi (HARD) + occupation (HARD).
-    Trả về list các lĩnh vực chuyên môn thực sự của person.
-    Dùng để lược bỏ nội dung nhập môn trong lĩnh vực đã thành thạo (CQ8).
-    """
     skills_text = skills_and_expertise.lower()
 
-    # Ánh xạ keyword trong skill sang domain
-    domain_keywords = {
-        "Công nghệ / Kỹ thuật số": [
-            "máy tính", "lập trình", "phần mềm", "website", "công nghệ",
-            "GPS", "kỹ thuật số", "giao diện", "tối ưu", "thiết kế đồ họa"
-        ],
-        "Tài chính / Kế toán": [
-            "tài chính", "kế toán", "lợi nhuận", "ngân sách", "đầu tư", "tính toán"
-        ],
-        "Quản lý / Tổ chức": [
-            "quản lý", "tổ chức", "lãnh đạo", "dự án", "kế hoạch", "điều phối"
-        ],
-        "Giao tiếp / Truyền thông": [
-            "giao tiếp", "thuyết trình", "đàm phán", "quan hệ", "truyền thông"
-        ],
-        "Nấu ăn / Ẩm thực": [
-            "nấu ăn", "ẩm thực", "chế biến", "món ăn", "dinh dưỡng"
-        ],
-        "Thủ công / Nghề truyền thống": [
-            "thủ công", "nghề truyền thống", "tháo lắp", "bảo dưỡng", "sửa chữa"
-        ],
-        "Vận tải / Giao nhận": [
-            "lái xe", "điều khiển", "giao hàng", "vận chuyển", "bản đồ"
-        ],
-        "Nông nghiệp / Tự nhiên": [
-            "trồng", "chăm sóc vườn", "nông nghiệp", "nuôi", "thu hoạch"
-        ],
-        "Y tế / Chăm sóc": [
-            "y tế", "chăm sóc", "sức khỏe", "bệnh", "dược"
-        ],
-        "Sáng tạo / Nghệ thuật": [
-            "sáng tạo", "thiết kế", "nghệ thuật", "âm nhạc", "phác thảo"
-        ],
-    }
+    scores = _compute_domain_scores(skills_text)
+    domains = {d for d, score in scores.items() if score >= DOMAIN_SCORE_THRESHOLD}
+    domains = _apply_domain_priority(domains, scores)
 
-    domains = set()
-
-    for domain, keywords in domain_keywords.items():
-        if any(kw in skills_text for kw in keywords):
-            domains.add(domain)
-
-    # Fallback từ occupation nếu không xác định được từ skills
     if not domains:
         occ_domain_map = {
             "Buôn bán / kinh doanh":          ["Tài chính / Kế toán", "Quản lý / Tổ chức"],
@@ -136,21 +130,14 @@ def get_domain(skills_and_expertise: str, occupation: str) -> list:
     return sorted(domains)
 
 
-# ── CHIỀU CULTURAL ────────────────────────────────────────────────────────────
-
 def get_cultural(cultural_background: str, region: str, zone: str) -> dict:
-    """
-    Suy ra từ cultural_background (GENERAL) + region + zone (GENERAL).
-    Trả về dict gồm orientation và context.
-    """
     text = cultural_background.lower()
 
-    # Tín hiệu gắn bó truyền thống
     traditional_signals = [
         "truyền thống", "lễ hội", "phong tục", "tập quán", "bài chòi",
         "quan họ", "hát xẩm", "làng", "tổ tiên", "tín ngưỡng", "đình làng"
     ]
-    # Tín hiệu cởi mở văn hóa bên ngoài
+
     open_signals = [
         "quốc tế", "hiện đại", "đa văn hóa", "nước ngoài", "toàn cầu",
         "hội nhập", "công nghệ", "startup", "mạng xã hội"
@@ -178,19 +165,13 @@ def get_cultural(cultural_background: str, region: str, zone: str) -> dict:
     }
 
 
-# ── CHIỀU PROTOTYPE ───────────────────────────────────────────────────────────
-
 def get_prototype(row: dict, language: dict, topic: list, cultural: dict) -> str:
-    """
-    Tổng hợp từ tất cả chiều — mô tả ngắn hình mẫu đại diện.
-    """
     age = row["age"]
     sex = row["sex"]
     edu = row["education_level"]
     occ = row["occupation"]
     zone = row["zone"]
 
-    # Xác định giai đoạn cuộc sống
     if age < 30:
         life_stage = "người trẻ"
     elif age < 50:
@@ -213,10 +194,6 @@ def get_prototype(row: dict, language: dict, topic: list, cultural: dict) -> str
 # ── HÀM TỔNG HỢP ─────────────────────────────────────────────────────────────
 
 def determine_community(row: dict) -> dict:
-    """
-    Đầu vào: dict chứa các trường của một person từ CSV.
-    Đầu ra: dict community với 5 chiều.
-    """
     language = get_language(row["education_level"], row["age"])
     topic    = get_topic(row["occupation"], row["age"])
     domain   = get_domain(row["skills_and_expertise"], row["occupation"])
@@ -234,17 +211,15 @@ def determine_community(row: dict) -> dict:
     }
 
 
-# ── TEST ──────────────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     import pandas as pd
     import json
 
-    df = pd.read_csv("/mnt/user-data/uploads/sample50.csv")
+    df = pd.read_csv("../data/sample50.csv")
 
     for i in [2, 5, 15]:  # bà Nga, người buôn bán, freelancer
         row = df.iloc[i].to_dict()
         community = determine_community(row)
         print(f"\n{'='*60}")
-        print(f"Person {i}: {row['persona'][:60]}...")
+        print(f"Person {i}: {row['persona']}...")
         print(json.dumps(community, ensure_ascii=False, indent=2))

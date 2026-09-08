@@ -7,16 +7,17 @@ from pipeline.community import determine_community
 from pipeline.worlds import build_worlds
 from pipeline.ontology_context import build_ontology_context, load_graph
 
+import json
+import os
 
-def build_prompt(row: dict, text: str, g) -> str:
-    """
-    Đầu vào:
-        row  — dict chứa toàn bộ trường của một person từ CSV
-        text — văn bản gốc cần tóm tắt
-        g    — rdflib Graph đã load TTL
-    Đầu ra:
-        prompt hoàn chỉnh dạng string
-    """
+_GENRE_DOMAIN_MAP_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "config", "genre_domain_map.json"
+)
+with open(_GENRE_DOMAIN_MAP_PATH, encoding="utf-8") as f:
+    GENRE_DOMAIN_MAP = json.load(f)
+
+
+def build_prompt(row: dict, text: str, g, content_meta: dict = None) -> str:
     community        = determine_community(row)
     worlds           = build_worlds(row)
     ontology_context = build_ontology_context(g)
@@ -101,6 +102,25 @@ Hãy viết bản tóm tắt cá nhân hóa cho người dùng trên. Chỉ tr�
 """
     return prompt
 
+def build_neutral_prompt(text: str) -> str:
+    n_words = len(text.split())
+    max_words = int(n_words * 0.7)
+    return f"""Bạn là hệ thống tóm tắt văn bản khách quan.
+
+Hãy tóm tắt văn bản dưới đây một cách trung lập, đầy đủ ý chính, không thiên vị
+theo bất kỳ góc nhìn cá nhân nào. Độ dài bản tóm tắt tối đa bằng 70% số từ của
+văn bản gốc. Không thêm thông tin ngoài văn bản gốc.
+
+═══════════════════════════════════════════════
+VĂN BẢN GỐC CẦN TÓM TẮT
+═══════════════════════════════════════════════
+
+{text}
+
+═══════════════════════════════════════════════
+Hãy viết bản tóm tắt khách quan. Chỉ trả về bản tóm tắt, không giải thích thêm.
+Độ dài bản tóm tắt KHÔNG ĐƯỢC VƯỢT QUÁ {max_words} từ (bản gốc có {n_words} từ).
+"""
 
 # ── TEST ──────────────────────────────────────────────────────────────────────
 
