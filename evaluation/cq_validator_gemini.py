@@ -22,7 +22,9 @@ from datetime import datetime
 
 import pandas as pd
 from google import genai
+import dotenv
 
+dotenv.load_dotenv()
 # Personas/ là project root (chứa cả pipeline/ và evaluation/, mỗi thư mục đều
 # có __init__.py) nên ta thêm root vào sys.path rồi import theo package
 # "pipeline.<module>" thay vì chèn thẳng pipeline/ vào sys.path.
@@ -33,22 +35,54 @@ if PROJECT_ROOT not in sys.path:
 from pipeline.community import determine_community
 from pipeline.worlds import build_worlds
 from pipeline.ontology_context import load_graph, build_ontology_context
-from pipeline.prompt_builder_2 import build_prompt
+from pipeline.prompt_builder import build_prompt
 from pipeline.summarizer import summarize_person, retry_generate
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_CSV = os.path.join(BASE_DIR, "..", "data", "sample50.csv")
-TTL_PATH = os.path.join(BASE_DIR, "..", "ontology", "persona_analysis_2_1.ttl")
+TTL_PATH = os.path.join(BASE_DIR, "..", "ontology", "persona_analysis.ttl")
 TEST_CASES_PATH = os.path.join(BASE_DIR, "cq_test_cases.json")
 
-OUT_MD = os.path.join(BASE_DIR, "cq_validation_report.md")
-OUT_JSON = os.path.join(BASE_DIR, "cq_validation_results.json")
+OUT_MD = os.path.join(BASE_DIR, "cq_validation_report_2.md")
+OUT_JSON = os.path.join(BASE_DIR, "cq_validation_results_2.json")
 
-SUMMARY_MODEL_NAME = "gemini-2.0-flash-lite"
-JUDGE_MODEL_NAME = "gemini-2.0-flash-lite"
+SUMMARY_MODEL_NAME = "gemini-3.1-flash-lite"
+JUDGE_MODEL_NAME = "gemini-3.1-flash-lite"
+
+# Khi Gemini trả về 503 (model đang quá tải), chờ rồi thử lại.
+RETRY_WAIT_SECONDS = 12
+MAX_RETRIES = 5
 
 
 # ── HELPERS ──────────────────────────────────────────────────────────────────
+
+def generate_content_with_retry(client: genai.Client, model: str, contents: str):
+    """Gọi Gemini và tự retry khi gặp lỗi 503 / UNAVAILABLE."""
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            return client.models.generate_content(
+                model=model,
+                contents=contents,
+            )
+        except Exception as e:
+            error_text = str(e)
+
+            is_503 = (
+                "503" in error_text
+                or "UNAVAILABLE" in error_text
+                or "high demand" in error_text.lower()
+            )
+
+            if not is_503 or attempt >= MAX_RETRIES:
+                raise
+
+            retry_no = attempt + 1
+            print(
+                f"  !!! Gemini trả về 503 (quá tải). "
+                f"Chờ {RETRY_WAIT_SECONDS} giây rồi thử lại "
+                f"({retry_no}/{MAX_RETRIES})..."
+            )
+            time.sleep(RETRY_WAIT_SECONDS)
 
 def load_test_cases() -> dict:
     with open(TEST_CASES_PATH, "r", encoding="utf-8") as f:
@@ -68,9 +102,10 @@ def summarize_person(row: dict, text: str, g, client: genai.Client) -> dict:
     worlds = build_worlds(row)
     prompt = build_prompt(row, text, g)
 
-    response = client.models.generate_content(
-        model=SUMMARY_MODEL_NAME,
-        contents=prompt,
+    response = generate_content_with_retry(
+        client,
+        SUMMARY_MODEL_NAME,
+        prompt,
     )
     summary = response.text.strip()
 
@@ -140,9 +175,10 @@ ngoài JSON, theo đúng schema sau:
 def call_judge(cq: dict, summary_a: str, summary_b: str, client: genai.Client) -> dict:
     prompt = build_judge_prompt(cq, summary_a, summary_b)
     try:
-        response = client.models.generate_content(
-            model=JUDGE_MODEL_NAME,
-            contents=prompt,
+        response = generate_content_with_retry(
+            client,
+            JUDGE_MODEL_NAME,
+            prompt,
         )
         raw = response.text.strip()
         # Loại bỏ markdown code fences nếu Gemini lỡ thêm vào

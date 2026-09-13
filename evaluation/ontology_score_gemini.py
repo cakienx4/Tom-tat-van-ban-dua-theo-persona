@@ -35,12 +35,12 @@ load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_CSV    = os.path.join(BASE_DIR, "..", "data",     "sample50.csv")
-OBO_PATH    = os.path.join(BASE_DIR, "..", "ontology", "persona_analysis_3.obo")
-CQ_JSON_DEFAULT = os.path.join(BASE_DIR, "cq_validation_results_gemini.json")
-OUT_JSON    = os.path.join(BASE_DIR, "ontology_score_results.json")
-OUT_MD      = os.path.join(BASE_DIR, "ontology_score_report_gemini.md.md")
+OBO_PATH    = os.path.join(BASE_DIR, "..", "ontology", "persona_analysis.obo")
+CQ_JSON_DEFAULT = os.path.join(BASE_DIR, "cq_validation_results_2.json")
+OUT_JSON    = os.path.join(BASE_DIR, "ontology_score_results_2.json")
+OUT_MD      = os.path.join(BASE_DIR, "ontology_score_report_2.md")
 
-MODEL_NAME = "gemini-2.0-flash-lite"
+MODEL_NAME = "gemini-3.1-flash-lite"
 
 # 10 nhánh chính của ontology, map sang cột tương ứng trong CSV
 BRANCH_COLUMN_MAP = {

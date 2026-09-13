@@ -12,7 +12,7 @@ from google import genai
 
 from pipeline.community import determine_community
 from pipeline.worlds import build_worlds
-from pipeline.prompt_builder_2 import build_prompt
+from pipeline.prompt_builder import build_prompt
 
 SUMMARY_MODEL_NAME = "gemini-3.1-flash-lite"
 

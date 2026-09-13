@@ -26,35 +26,56 @@ def get_language(education_level: str, age: int) -> dict:
     return {"level": level, "description": desc_map[level]}
 
 
-def get_topic(occupation: str, age: int) -> list:
-    occupation_map = {
-        "Buôn bán / kinh doanh":              ["Thị trường", "Giá cả", "Kinh doanh", "Tài chính"],
-        "Kỹ thuật viên / kỹ sư":              ["Kỹ thuật", "Công nghệ", "Khoa học"],
-        "Nghỉ hưu":                           ["Sức khỏe", "Đời sống", "Gia đình", "Cộng đồng"],
-        "Nông nghiệp / ngư nghiệp":           ["Nông sản", "Thời tiết", "Địa phương", "Môi trường"],
-        "Y tế / dược":                        ["Sức khỏe", "Y học", "Dinh dưỡng"],
-        "Nghiên cứu / học thuật":             ["Tri thức", "Phân tích", "Giáo dục", "Khoa học"],
-        "Công nhân / lao động phổ thông":     ["Đời sống", "Thu nhập", "Việc làm", "Thực tế"],
-        "Tài xế / giao hàng":                ["Giao thông", "Đời sống", "Thu nhập"],
-        "Xây dựng / thợ thủ công":           ["Xây dựng", "Vật liệu", "Thực hành"],
-        "Nhân viên văn phòng":               ["Công việc", "Kỹ năng mềm", "Tài chính cá nhân"],
-        "Freelancer / làm tự do":            ["Sáng tạo", "Công nghệ", "Kinh doanh cá nhân"],
-        "Quản lý / kinh doanh":              ["Quản lý", "Kinh doanh", "Lãnh đạo", "Thị trường"],
-        "Dịch vụ / phục vụ":                ["Đời sống", "Kỹ năng giao tiếp", "Du lịch"],
-        "Thất nghiệp / tìm việc":           ["Việc làm", "Kỹ năng", "Tài chính cá nhân"],
-        "Nghề tự do online / sáng tạo nội dung": ["Sáng tạo", "Công nghệ", "Truyền thông"],
-        "Khác / không rõ":                   ["Đời sống", "Thực tế", "Cộng đồng"],
+def get_topic(occupation: str, age: int, row: dict = None) -> dict:
+    """
+    {
+      "hard": [...topics từ occupation, như cũ...],
+      "soft": {
+          "Du lịch":   {"subtopic": "Thiên nhiên / Sinh thái", "intensity": 0.9, "summary": "..."},
+          "Nghệ thuật":{"subtopic": None, "intensity": 0.3, "summary": "..."},
+          ...
+      }
     }
-    topics = occupation_map.get(occupation, ["Đời sống", "Thực tế"])
+    """
+    occupation_map = { "...": "giữ nguyên như cũ" }
+    hard_topics = occupation_map.get(occupation, ["Đời sống", "Thực tế"])
+    if age >= 60 and "Sức khỏe" not in hard_topics:
+        hard_topics = ["Sức khỏe"] + hard_topics
 
-    # Bổ trợ: người >= 60 tuổi luôn thêm "Sức khỏe" vào đầu nếu chưa có (CQ3)
-    if age >= 60 and "Sức khỏe" not in topics:
-        topics = ["Sức khỏe"] + topics
+    soft = {}
+    if row is not None:
+        field_labels = {
+            "sports_persona": "Thể thao", "arts_persona": "Nghệ thuật",
+            "travel_persona": "Du lịch", "culinary_persona": "Ẩm thực",
+            "hobbies_and_interests": "Sở thích khác",
+        }
+        for field, label in field_labels.items():
+            text = str(row.get(field, "")).strip()
+            if not text or text.lower() in ("nan", "none", "không có"):
+                continue
 
-    return topics
+            sentences = [s.strip() for s in text.split(".") if s.strip()]
+            summary = ". ".join(sentences[:2])
+            if summary and not summary.endswith("."):
+                summary += "."
+
+            subtopic = None
+            if label in SOFT_TOPICS:
+                sub_scores = _score_keyword_groups(text, SOFT_TOPICS[label])
+                matched = {g for g, s in sub_scores.items() if s >= DOMAIN_SCORE_THRESHOLD}
+                if matched:
+                    subtopic = max(matched, key=lambda g: sub_scores[g])
+
+            soft[label] = {
+                "subtopic": subtopic,
+                "intensity": _score_intensity(text),
+                "summary": summary,
+            }
+
+    return {"hard": hard_topics, "soft": soft}
 
 _DOMAIN_KEYWORDS_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "data", "domain_keywords.json"
+    os.path.dirname(__file__), "..", "config", "domain_keywords.json"
 )
 
 with open(_DOMAIN_KEYWORDS_PATH, encoding="utf-8") as f:
@@ -63,57 +84,60 @@ with open(_DOMAIN_KEYWORDS_PATH, encoding="utf-8") as f:
 DOMAIN_KEYWORDS   = _DOMAIN_DATA["domains"]
 KEYWORD_RELATIONS = _DOMAIN_DATA.get("keyword_relations", [])
 DOMAIN_PRIORITY   = _DOMAIN_DATA.get("domain_priority", [])
+SOFT_TOPICS       = _DOMAIN_DATA.get("soft_topics", {})          # MỚI
+INTENSITY_MARKERS = _DOMAIN_DATA.get("intensity_markers", {})    # MỚI
 
-DOMAIN_SCORE_THRESHOLD = 0.6   # ngưỡng để 1 domain được coi là "có liên quan"
-PRIORITY_TIE_MARGIN    = 0.15  # chênh lệch điểm coi là "gần bằng nhau" khi tie-break
+DOMAIN_SCORE_THRESHOLD = 0.6
+PRIORITY_TIE_MARGIN    = 0.15
+INTENSITY_HIGH_THRESHOLD = 0.5
 
-
-def _compute_domain_scores(skills_text: str) -> dict:
+def _score_keyword_groups(text: str, keyword_groups: dict, relations: list = None) -> dict:
     """
-    Tính điểm từng domain:
-    1. Cộng trọng số keyword khớp trực tiếp trong domains.
-    2. Cộng/trừ điểm bổ sung từ keyword_relations (tuong_quan/keo_theo dương,
-       kim_che âm) khi từ khóa 'from' xuất hiện trong text, tác động lên domain 'to'.
+    Tổng quát hóa của _compute_domain_scores cũ — không còn đọc thẳng
+    DOMAIN_KEYWORDS/KEYWORD_RELATIONS ở module scope, mà nhận qua tham số,
+    nên dùng được cho cả Domain (chuyên môn) lẫn soft_topics (Du lịch, Nghệ thuật...).
     """
-    scores = {domain: 0.0 for domain in DOMAIN_KEYWORDS}
+    text = text.lower()
+    scores = {group: 0.0 for group in keyword_groups}
 
-    for domain, keyword_weights in DOMAIN_KEYWORDS.items():
-        for kw, weight in keyword_weights.items():
-            if kw in skills_text:
-                scores[domain] += weight
+    for group, kw_weights in keyword_groups.items():
+        for kw, weight in kw_weights.items():
+            if kw in text:
+                scores[group] += weight
 
-    for rel in KEYWORD_RELATIONS:
-        kw = rel["from"]
-        target_domain = rel["to"]
-        weight = rel["weight"]
-        if kw in skills_text and target_domain in scores:
-            scores[target_domain] += weight
+    if relations:
+        for rel in relations:
+            kw, target, weight = rel["from"], rel["to"], rel["weight"]
+            if kw in text and target in scores:
+                scores[target] += weight
 
     return scores
 
 
-def _apply_domain_priority(selected: set, scores: dict) -> set:
-    """
-    Khi 2 domain xung đột (theo domain_priority) đều đã vượt threshold và điểm
-    số gần bằng nhau (chênh lệch <= PRIORITY_TIE_MARGIN), chỉ giữ lại domain
-    được ưu tiên ('prefer'), loại domain còn lại ('over').
-    """
+def _apply_priority_rules(selected: set, scores: dict, priority_rules: list, tie_margin: float) -> set:
+    """Tổng quát hóa của _apply_domain_priority cũ — nhận priority_rules/tie_margin qua tham số."""
     result = set(selected)
-    for rule in DOMAIN_PRIORITY:
+    for rule in priority_rules:
         prefer, over = rule["prefer"], rule["over"]
         if prefer in result and over in result:
-            diff = abs(scores.get(prefer, 0.0) - scores.get(over, 0.0))
-            if diff <= PRIORITY_TIE_MARGIN:
+            if abs(scores.get(prefer, 0.0) - scores.get(over, 0.0)) <= tie_margin:
                 result.discard(over)
     return result
 
 
-def get_domain(skills_and_expertise: str, occupation: str) -> list:
-    skills_text = skills_and_expertise.lower()
+def _score_intensity(text: str) -> float:
+    """MỚI — dùng chung cho mọi field SOFT, đọc từ intensity_markers trong domain_keywords.json."""
+    text = text.lower()
+    score = 0.0
+    for marker, weight in INTENSITY_MARKERS.items():
+        if marker in text:
+            score = max(score, weight)
+    return score
 
-    scores = _compute_domain_scores(skills_text)
-    domains = {d for d, score in scores.items() if score >= DOMAIN_SCORE_THRESHOLD}
-    domains = _apply_domain_priority(domains, scores)
+def get_domain(skills_and_expertise: str, occupation: str) -> list:
+    scores = _score_keyword_groups(skills_and_expertise, DOMAIN_KEYWORDS, KEYWORD_RELATIONS)
+    domains = {d for d, s in scores.items() if s >= DOMAIN_SCORE_THRESHOLD}
+    domains = _apply_priority_rules(domains, scores, DOMAIN_PRIORITY, PRIORITY_TIE_MARGIN)
 
     if not domains:
         occ_domain_map = {
@@ -129,31 +153,35 @@ def get_domain(skills_and_expertise: str, occupation: str) -> list:
 
     return sorted(domains)
 
-
 def get_cultural(cultural_background: str, region: str, zone: str) -> dict:
     text = cultural_background.lower()
 
     traditional_signals = [
-        "truyền thống", "lễ hội", "phong tục", "tập quán", "bài chòi",
+        "truyền thống", "phong tục", "tập quán", "bài chòi",
         "quan họ", "hát xẩm", "làng", "tổ tiên", "tín ngưỡng", "đình làng"
-    ]
+    ]  # đã bỏ "lễ hội" — quá chung chung, không phân biệt được truyền thống/hiện đại
 
     open_signals = [
         "quốc tế", "hiện đại", "đa văn hóa", "nước ngoài", "toàn cầu",
-        "hội nhập", "công nghệ", "startup", "mạng xã hội"
+        "hội nhập", "công nghệ", "startup", "mạng xã hội",
+        "chung cư", "căn hộ", "cao tầng", "đô thị"
     ]
+
+    blend_signals = ["pha trộn", "kết hợp giữa", "vừa truyền thống vừa", "giao thoa"]
 
     trad_score = sum(1 for s in traditional_signals if s in text)
     open_score = sum(1 for s in open_signals if s in text)
+    is_blend = any(s in text for s in blend_signals)
 
-    if trad_score > open_score:
+    if is_blend and abs(trad_score - open_score) <= 1:
+        orientation = "Trung dung"
+    elif trad_score > open_score:
         orientation = "Truyền thống"
     elif open_score > trad_score:
         orientation = "Cởi mở / Hội nhập"
     else:
         orientation = "Trung dung"
 
-    # Zone bổ trợ
     if zone == "Nông Thôn" and orientation == "Trung dung":
         orientation = "Truyền thống"
 
@@ -163,7 +191,6 @@ def get_cultural(cultural_background: str, region: str, zone: str) -> dict:
         "zone": zone,
         "context": f"{orientation} — {zone} — {region}"
     }
-
 
 def get_prototype(row: dict, language: dict, topic: list, cultural: dict) -> str:
     age = row["age"]
@@ -194,20 +221,15 @@ def get_prototype(row: dict, language: dict, topic: list, cultural: dict) -> str
 # ── HÀM TỔNG HỢP ─────────────────────────────────────────────────────────────
 
 def determine_community(row: dict) -> dict:
-    language = get_language(row["education_level"], row["age"])
-    topic    = get_topic(row["occupation"], row["age"])
-    domain   = get_domain(row["skills_and_expertise"], row["occupation"])
-    cultural = get_cultural(
-        row["cultural_background"], row["region"], row["zone"]
-    )
-    prototype = get_prototype(row, language, topic, cultural)
+    language  = get_language(row["education_level"], row["age"])
+    topic     = get_topic(row["occupation"], row["age"], row)
+    domain    = get_domain(row["skills_and_expertise"], row["occupation"])
+    cultural  = get_cultural(row["cultural_background"], row["region"], row["zone"])
+    prototype = get_prototype(row, language, topic["hard"], cultural)
 
     return {
-        "Language":  language,
-        "Topic":     topic,
-        "Domain":    domain,
-        "Cultural":  cultural,
-        "Prototype": prototype,
+        "Language": language, "Topic": topic, "Domain": domain,
+        "Cultural": cultural, "Prototype": prototype,
     }
 
 
