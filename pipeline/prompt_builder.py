@@ -271,8 +271,8 @@ Chỉ trả về 1-2 câu, không giải thích thêm.
 if __name__ == "__main__":
     import pandas as pd
 
-    g = load_graph("../ontology/persona_analysis_3.ttl")
-    df = pd.read_csv("../data/sample50.csv")
+    g = load_graph("../ontology/persona_analysis.ttl")
+    df = pd.read_csv("../../data/sample50.csv")
 
     sample_text = """Lễ hội pháo hoa quốc tế Đà Nẵng năm nay dự kiến diễn ra từ ngày 31/5 đến 12/7,
 với sự tham gia của 8 đội đến từ các quốc gia như Ý, Úc, Mỹ, Phần Lan và Việt Nam.

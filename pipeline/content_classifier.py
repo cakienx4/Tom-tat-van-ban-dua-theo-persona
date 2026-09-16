@@ -1,14 +1,3 @@
-"""
-pipeline/content_classifier.py
-
-Phân loại văn bản đầu vào theo:
-- type  (kiểu bài: hình thức trình bày)
-- genre (loại bài: lĩnh vực nội dung)
-
-Dùng cùng cơ chế weighted-keyword + threshold + priority tie-break như
-get_domain() trong community.py, để đồng bộ cách tiếp cận rule-based
-trong toàn project.
-"""
 
 import json
 import os
@@ -84,5 +73,7 @@ def classify_content(text: str) -> dict:
 
 
 if __name__ == "__main__":
-    sample_text = """Lễ hội pháo hoa quốc tế Đà Nẵng năm nay dự kiến diễn ra từ ngày 31/5 đến 12/7..."""
+    sample_text = """
+    Chất lượng sản phẩm tuyệt vời, giá cả hợp lý. Đã giới thiệu cho bạn bè. Sản phẩm dễ sử dụng, có ghi chú hướng dẫn rõ ràng. Tôi vô cùng hài lòng với lần mua sắm này.
+"""
     print(classify_content(sample_text))

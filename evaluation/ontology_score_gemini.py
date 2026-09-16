@@ -1,24 +1,3 @@
-"""
-ontology_score.py
-Tính Ontology Score = (feature_coverage + CQ_coverage) / 2
-
-  feature_coverage : tỷ lệ đặc trưng persona thực tế trong sample50.csv
-                     được bao phủ bởi ít nhất một term trong ontology
-  CQ_coverage      : tỷ lệ CQ có verdict PASS trong cq_validation_results_gemini.json
-
-Quy trình đo feature_coverage (per branch):
-  1. Dùng Gemini trích danh sách đặc trưng cụ thể từ toàn bộ 50 prose text
-     (1 Gemini call / branch → 10 calls tổng)
-  2. Với mỗi đặc trưng, thử match string với term names + synonyms của ontology
-     Những đặc trưng không match được → gộp lại, dùng 1 Gemini call / branch để
-     đánh giá semantic coverage (có term nào trong ontology bao phủ không?)
-  3. coverage = số đặc trưng được bao phủ / tổng đặc trưng trích được
-
-Cách dùng:
-    python ontology_score.py
-    python ontology_score.py --cq-results path/to/cq_validation_results_gemini.json
-"""
-
 import argparse
 import json
 import os
@@ -36,9 +15,9 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_CSV    = os.path.join(BASE_DIR, "..", "data",     "sample50.csv")
 OBO_PATH    = os.path.join(BASE_DIR, "..", "ontology", "persona_analysis.obo")
-CQ_JSON_DEFAULT = os.path.join(BASE_DIR, "cq_validation_results_2.json")
-OUT_JSON    = os.path.join(BASE_DIR, "ontology_score_results_2.json")
-OUT_MD      = os.path.join(BASE_DIR, "ontology_score_report_2.md")
+CQ_JSON_DEFAULT = os.path.join(BASE_DIR, "cq_validation_results_3.json")
+OUT_JSON    = os.path.join(BASE_DIR, "ontology_score_results_3.json")
+OUT_MD      = os.path.join(BASE_DIR, "ontology_score_report_3.md")
 
 MODEL_NAME = "gemini-3.1-flash-lite"
 
@@ -57,13 +36,7 @@ BRANCH_COLUMN_MAP = {
 }
 
 
-# ── LOAD ONTOLOGY ──────────────────────────────────────────────────────────
-
 def load_ontology_terms(obo_path: str) -> dict:
-    """
-    Trả về dict: branch_id -> {"l1": [...], "all_names": set()}
-    all_names: tất cả tên term + synonym ở mọi cấp (L1, L2, L3) trong branch
-    """
     onto = pronto.Ontology(obo_path)
     result = {}
 
@@ -75,22 +48,21 @@ def load_ontology_terms(obo_path: str) -> dict:
         for t in root.subclasses(with_self=False):
             name = t.name or ""
             defn = str(t.definition) if t.definition else ""
-            depth = len(list(t.superclasses(with_self=False))) - 1  # 0-based từ root
+            depth = len(list(t.superclasses(with_self=False))) - 1
 
-            if depth == 1:  # L1 = con trực tiếp của root
+            if depth == 1:
                 l1_terms.append({
                     "id":   t.id,
                     "name": name,
                     "def":  defn,
                 })
 
-            # Thu thập tên để dùng cho string matching
             if name:
                 all_names.add(name.lower())
             for s in t.synonyms:
                 if s.description:
                     all_names.add(s.description.lower())
-            # Thêm các keyword quan trọng từ definition
+
             for word in re.findall(r'\b\w{4,}\b', defn.lower()):
                 all_names.add(word)
 
@@ -102,8 +74,6 @@ def load_ontology_terms(obo_path: str) -> dict:
     return result
 
 
-# ── GEMINI HELPERS ──────────────────────────────────────────────────────────
-
 def retry_generate(client: genai.Client, prompt: str, model: str = MODEL_NAME) -> str:
     while True:
         try:
@@ -114,7 +84,7 @@ def retry_generate(client: genai.Client, prompt: str, model: str = MODEL_NAME) -
             if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
                 match = re.search(r"retry in ([0-9.]+)s", msg, re.IGNORECASE)
                 wait = float(match.group(1)) + 2 if match else 35
-                print(f"  ⚠ Rate limit, chờ {wait:.1f}s...")
+                print(f" Rate limit, chờ {wait:.1f}s...")
                 time.sleep(wait)
             else:
                 raise
@@ -122,10 +92,6 @@ def retry_generate(client: genai.Client, prompt: str, model: str = MODEL_NAME) -
 
 def extract_features(client: genai.Client, branch_id: str, l1_terms: list,
                      prose_list: list) -> list:
-    """
-    Bước 1: Dùng Gemini trích danh sách đặc trưng cụ thể từ toàn bộ prose text.
-    Trả về list[str] — các đặc trưng đã de-duplicate.
-    """
     l1_str = "\n".join(
         f'- {t["name"]}: {t["def"][:120]}' for t in l1_terms
     )
@@ -167,11 +133,6 @@ CHỈ trả về JSON array of strings, không thêm bất kỳ nội dung nào 
 
 def semantic_match(client: genai.Client, branch_id: str, l1_terms: list,
                    unmatched_features: list) -> dict:
-    """
-    Bước 2b: Với các đặc trưng chưa match được string, hỏi Gemini xem
-    ontology có term bao phủ không.
-    Trả về dict: feature -> True/False
-    """
     if not unmatched_features:
         return {}
 
@@ -205,10 +166,7 @@ CHỈ trả về JSON object, key là tên đặc trưng (nguyên văn), value l
 
 
 def string_match(feature: str, all_names: set) -> bool:
-    """
-    Match đơn giản: kiểm tra xem bất kỳ word nào trong feature
-    có xuất hiện trong tập tên term + synonym của branch không.
-    """
+
     words = set(re.findall(r'\b\w{4,}\b', feature.lower()))
     return bool(words & all_names)
 
@@ -217,10 +175,7 @@ def string_match(feature: str, all_names: set) -> bool:
 
 def measure_feature_coverage(client: genai.Client, df: pd.DataFrame,
                               onto_terms: dict) -> dict:
-    """
-    Đo feature_coverage cho toàn bộ 10 branch.
-    Trả về dict kết quả chi tiết.
-    """
+
     branch_results = {}
 
     for branch_id, col in BRANCH_COLUMN_MAP.items():
@@ -290,8 +245,6 @@ def measure_feature_coverage(client: genai.Client, df: pd.DataFrame,
     return branch_results
 
 
-# ── CQ COVERAGE ─────────────────────────────────────────────────────────────
-
 def measure_cq_coverage(cq_json_path: str) -> dict:
     with open(cq_json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -316,8 +269,6 @@ def measure_cq_coverage(cq_json_path: str) -> dict:
         ],
     }
 
-
-# ── EXPORT ───────────────────────────────────────────────────────────────────
 
 def export_json(feature_results: dict, cq_results: dict, score: float):
     total_f = sum(b["features_total"]   for b in feature_results.values())
@@ -362,7 +313,7 @@ def export_markdown(feature_results: dict, cq_results: dict, score: float):
     lines.append(f"| **Ontology Score** | **{score:.1%}** |\n")
 
     lines.append("## Feature Coverage theo nhánh\n")
-    lines.append("| Nhánh | Đặc trưng trích | Được bao phủ | Coverage |")
+    lines.append("| Branch | Extracted Features | Covered Features | Coverage |")
     lines.append("|---|---|---|---|")
     for bid, b in feature_results.items():
         lines.append(
@@ -382,12 +333,10 @@ def export_markdown(feature_results: dict, cq_results: dict, score: float):
     print(f"Đã ghi: {OUT_MD}")
 
 
-# ── MAIN ────────────────────────────────────────────────────────────────────
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cq-results", default=CQ_JSON_DEFAULT,
-                        help="Đường dẫn đến cq_validation_results_gemini.json")
+                        help="Đường dẫn đến cq_validation_results.json")
     parser.add_argument("--api-key", default=None)
     args = parser.parse_args()
 

@@ -1,5 +1,5 @@
 from rdflib import Graph, Namespace
-
+from pathlib import Path
 BASE = Namespace("http://purl.obolibrary.org/obo/persona#")
 
 HARD_BRANCHES = ["professional_persona", "skills_and_expertise"]
@@ -41,6 +41,7 @@ REL_LABELS = {
 
 def load_graph(ttl_path: str) -> Graph:
     g = Graph()
+    ttl_path = Path(ttl_path).resolve().as_uri()
     g.parse(ttl_path, format='turtle')
     return g
 
@@ -109,11 +110,6 @@ def _format_branch(branch_name: str, branch_data: dict) -> str:
 
 
 def build_ontology_context(g: Graph, branches: list = None) -> str:
-    """
-    Sinh ontology_context dạng text từ graph.
-    Mặc định duyệt cả 10 branches (HARD + SOFT + GENERAL).
-    Có thể truyền `branches` để giới hạn (ví dụ chỉ HARD_BRANCHES cho confirmation world).
-    """
     if branches is None:
         branches = ALL_BRANCHES
 
@@ -130,7 +126,7 @@ def build_ontology_context(g: Graph, branches: list = None) -> str:
 # ── TEST ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    g = load_graph("../ontology/persona_analysis_3.ttl")
+    g = load_graph("../ontology/persona_analysis.ttl")
     context = build_ontology_context(g)
     print(context)
     print(f"\n--- Tổng độ dài context: {len(context)} ký tự ---")
