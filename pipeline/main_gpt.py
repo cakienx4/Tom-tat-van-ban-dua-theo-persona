@@ -1,9 +1,10 @@
 """
-pipeline/main.py
+pipeline/main_gpt.py
 
-Entry point chạy pipeline sản xuất end-to-end:
+Entry point chạy pipeline sản xuất end-to-end (bản dùng model gpt-oss-120b
+thay cho Gemini trong main.py):
     đọc CSV -> community + worlds + content_classifier -> ontology_context
-    -> prompt_builder -> summarizer -> ghi kết quả vào output/
+    -> prompt_builder -> summarizer_gpt -> ghi kết quả vào output/
 
 Kết quả sinh ra cho mỗi cặp (person, text):
     - output/profiles/{uuid}.json              : profile chuẩn hóa
@@ -18,11 +19,11 @@ Chạy:
     python pipeline/input_text.py
 
     2: chạy pipeline, tự động xếp hạng và tóm tắt ưu tiên
-    python pipeline/main.py --rows 2 5 15 --custom-texts
+    python pipeline/main_gpt.py --rows 2 5 15 --custom-texts
 
     # Cách cũ vẫn dùng được cho eval
-    python pipeline/main.py --rows 2 5 15 --texts text_1 text_2
-    python pipeline/main.py --all-rows --texts text_1
+    python pipeline/main_gpt.py --rows 2 5 15 --texts text_1 text_2
+    python pipeline/main_gpt.py --all-rows --texts text_1
 """
 import argparse
 import json
@@ -31,8 +32,6 @@ import sys
 
 import pandas as pd
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 
 load_dotenv()
 
@@ -45,18 +44,17 @@ from pipeline.worlds import build_worlds
 from pipeline.content_classifier import classify_content
 from pipeline.ontology_context import load_graph, build_ontology_context
 from pipeline.prompt_builder import build_prompt, build_neutral_prompt, build_brief_prompt
-from pipeline.summarizer import summarize_person, retry_generate, SUMMARY_MODEL_NAME
+from pipeline.summarizer_gpt import (
+    summarize_person, retry_generate, get_client, SUMMARY_MODEL_NAME, generate_content_gpt,
+)
+from pipeline.generation import generate_with_length_limit, generate_specific_with_length_limit
 from pipeline.text_store import load_custom_texts
 from pipeline.relevance import score_text_relevance
-from pipeline.generation import (
-    generate_with_length_limit,
-    generate_specific_with_length_limit,
-)
 
 DATA_CSV = os.path.join(PROJECT_ROOT, "data", "sample50.csv")
 TTL_PATH = os.path.join(PROJECT_ROOT, "ontology", "persona_analysis.ttl")
 TEXTS_PATH = os.path.join(PROJECT_ROOT, "eval", "cq_test_cases.json")
-CUSTOM_TEXT_STORE = os.path.join(PROJECT_ROOT, "document", "text_2.txt")
+CUSTOM_TEXT_STORE = os.path.join(PROJECT_ROOT, "document", "text.txt")
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
 DIR_PROFILES = os.path.join(OUTPUT_DIR, "profiles")
 DIR_INFERENCES = os.path.join(OUTPUT_DIR, "inferences")
@@ -66,6 +64,7 @@ DIR_SPECIFIC = os.path.join(OUTPUT_DIR, "summaries", "specific")
 
 for d in [DIR_PROFILES, DIR_INFERENCES, DIR_GUIDE, DIR_GENERAL, DIR_SPECIFIC]:
     os.makedirs(d, exist_ok=True)
+
 
 def load_texts() -> dict:
     with open(TEXTS_PATH, "r", encoding="utf-8") as f:
@@ -83,7 +82,7 @@ def save_text(path: str, content: str):
         f.write(content)
 
 
-def process_one(row: dict, text: str, text_id: str, g, client: genai.Client) -> dict:
+def process_one(row: dict, text: str, text_id: str, g, client) -> dict:
     uuid = row.get("uuid", f"row_{row.get('index', 'unknown')}")
 
     # 1. Community + Worlds + Content classification
@@ -113,10 +112,11 @@ def process_one(row: dict, text: str, text_id: str, g, client: genai.Client) -> 
     # 5a. Tóm tắt "Chung" — khách quan, không cá nhân hóa
     neutral_prompt = build_neutral_prompt(text)
     general_summary, general_meta = generate_with_length_limit(
-        client.models.generate_content,
+        generate_content_gpt,
         retry_generate,
         source_text=text,
-        base_kwargs={"model": SUMMARY_MODEL_NAME, "contents": neutral_prompt, "config": {"temperature": 0.0}},
+        base_kwargs={"client": client, "model": SUMMARY_MODEL_NAME, "contents": neutral_prompt,
+                     "config": {"temperature": 0.0}},
         prompt_key="contents",
     )
     save_text(
@@ -143,15 +143,18 @@ def process_one(row: dict, text: str, text_id: str, g, client: genai.Client) -> 
         "status": status,
     }
 
+
 def generate_brief_mention(text: str, client) -> str:
     prompt = build_brief_prompt(text)
     response = retry_generate(
-        client.models.generate_content,
+        generate_content_gpt,
+        client=client,
         model=SUMMARY_MODEL_NAME,
         contents=prompt,
         config={"temperature": 0.0},
     )
     return response.text.strip()
+
 
 def build_combined_output(primary_id, primary_summary, others_meta) -> str:
     lines = [f"[Nội dung chính — {primary_id}]", primary_summary, ""]
@@ -160,6 +163,7 @@ def build_combined_output(primary_id, primary_summary, others_meta) -> str:
         for text_id, brief in others_meta:
             lines.append(f"- {text_id}: {brief}")
     return "\n".join(lines)
+
 
 def process_multi_texts(row: dict, texts: dict, g, client) -> dict:
     uuid = row.get("uuid", f"row_{row.get('index', 'unknown')}")
@@ -188,10 +192,10 @@ def process_multi_texts(row: dict, texts: dict, g, client) -> dict:
     for item in scored:
         neutral_prompt = build_neutral_prompt(item["text"])
         g_summary, g_meta = generate_with_length_limit(
-            client.models.generate_content,
+            generate_content_gpt,
             retry_generate,
             source_text=item["text"],
-            base_kwargs={"model": SUMMARY_MODEL_NAME, "contents": neutral_prompt,
+            base_kwargs={"client": client, "model": SUMMARY_MODEL_NAME, "contents": neutral_prompt,
                          "config": {"temperature": 0.0}},
             prompt_key="contents",
         )
@@ -233,17 +237,8 @@ def process_multi_texts(row: dict, texts: dict, g, client) -> dict:
             "primary_text_id": primary["text_id"], "status": status}
 
 
-def run(row_indices, text_ids=None, api_key=None, use_custom=False):
-    if not api_key:
-        api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        print("Chưa set GEMINI_API_KEY. Chạy: export GEMINI_API_KEY=your_key")
-        sys.exit(1)
-
-    client = genai.Client(
-        api_key=api_key,
-        http_options=types.HttpOptions(timeout=60000),  # 60s, đơn vị mili-giây
-    )
+def run(row_indices, text_ids=None, use_custom=False):
+    client = get_client()
     df = pd.read_csv(DATA_CSV)
     g = load_graph(TTL_PATH)
 
@@ -286,8 +281,9 @@ def run(row_indices, text_ids=None, api_key=None, use_custom=False):
                                  "status": "ERROR", "error": str(e)})
     return results
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Chạy pipeline sản xuất Personas end-to-end.")
+    parser = argparse.ArgumentParser(description="Chạy pipeline sản xuất Personas end-to-end (gpt-oss-120b).")
     parser.add_argument("--rows", nargs="*", type=int, default=None,
                          help="Chỉ số dòng (0-indexed) trong sample50.csv cần xử lý")
     parser.add_argument("--all-rows", action="store_true",
@@ -295,8 +291,7 @@ def main():
     parser.add_argument("--texts", nargs="+", default=None,
                          help="Danh sách text_id trong cq_test_cases.json (dùng cho eval)")
     parser.add_argument("--custom-texts", action="store_true",
-                         help="Dùng nhiều văn bản tự nhập trong document/text_2.txt")
-    parser.add_argument("--api-key", default=None)
+                         help="Dùng nhiều văn bản tự nhập trong document/text.txt")
     args = parser.parse_args()
 
     if not args.texts and not args.custom_texts:
@@ -312,7 +307,7 @@ def main():
         print("Cần chỉ định --rows hoặc --all-rows")
         sys.exit(1)
 
-    results = run(row_indices, text_ids=args.texts, api_key=args.api_key, use_custom=args.custom_texts)
+    results = run(row_indices, text_ids=args.texts, use_custom=args.custom_texts)
 
     n_ok = sum(1 for r in results if r["status"] == "OK")
     n_warn = sum(1 for r in results if r["status"] == "OK_LENGTH_WARNING")

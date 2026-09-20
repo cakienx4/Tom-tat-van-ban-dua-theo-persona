@@ -28,6 +28,16 @@ def get_language(education_level: str, age: int) -> dict:
 
 
 def get_topic(occupation: str, age: int, row: dict = None) -> dict:
+    """
+    {
+      "hard": [...topics từ occupation, như cũ...],
+      "soft": {
+          "Du lịch":   {"subtopic": "Thiên nhiên / Sinh thái", "intensity": 0.9, "summary": "..."},
+          "Nghệ thuật":{"subtopic": None, "intensity": 0.3, "summary": "..."},
+          ...
+      }
+    }
+    """
     occupation_map = {"...": "giữ nguyên như cũ"}
     hard_topics = occupation_map.get(occupation, ["Đời sống", "Thực tế"])
     if age >= 60 and "Sức khỏe" not in hard_topics:

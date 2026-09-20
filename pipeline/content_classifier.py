@@ -1,3 +1,14 @@
+"""
+pipeline/content_classifier.py
+
+Phân loại văn bản đầu vào theo:
+- type  (kiểu bài: hình thức trình bày)
+- genre (loại bài: lĩnh vực nội dung)
+
+Dùng cùng cơ chế weighted-keyword + threshold + priority tie-break như
+get_domain() trong community.py, để đồng bộ cách tiếp cận rule-based
+trong toàn project.
+"""
 
 import json
 import os

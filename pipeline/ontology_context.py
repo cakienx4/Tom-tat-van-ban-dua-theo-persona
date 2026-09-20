@@ -110,6 +110,11 @@ def _format_branch(branch_name: str, branch_data: dict) -> str:
 
 
 def build_ontology_context(g: Graph, branches: list = None) -> str:
+    """
+    Sinh ontology_context dạng text từ graph.
+    Mặc định duyệt cả 10 branches (HARD + SOFT + GENERAL).
+    Có thể truyền `branches` để giới hạn (ví dụ chỉ HARD_BRANCHES cho confirmation world).
+    """
     if branches is None:
         branches = ALL_BRANCHES
 

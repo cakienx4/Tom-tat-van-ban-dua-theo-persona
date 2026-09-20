@@ -1,14 +1,14 @@
 def build_confirmation_world(row: dict) -> dict:
-    age = row["age"]
-    sex = row["sex"]
-    education = row["education_level"]
-    occupation = row["occupation"]
-    country = row["country"]
-    region = row["region"]
-    zone = row["zone"]
+    age            = row["age"]
+    sex            = row["sex"]
+    education      = row["education_level"]
+    occupation     = row["occupation"]
+    country        = row["country"]
+    region         = row["region"]
+    zone           = row["zone"]
     marital_status = row["marital_status"]
-    skills = row["skills_and_expertise"]
-    professional = row["professional_persona"]
+    skills         = row["skills_and_expertise"]
+    professional   = row["professional_persona"]
 
     if age < 18:
         life_stage = "thiếu niên"
@@ -22,11 +22,11 @@ def build_confirmation_world(row: dict) -> dict:
         life_stage = "người cao tuổi"
 
     family_context_map = {
-        "Độc thân": "chưa lập gia đình",
-        "Đã kết hôn": "đã lập gia đình",
-        "Góa": "góa bụa",
-        "Ly hôn": "đã ly hôn",
-        "Ly thân": "đang ly thân",
+        "Độc thân":    "chưa lập gia đình",
+        "Đã kết hôn":  "đã lập gia đình",
+        "Góa":         "góa bụa",
+        "Ly hôn":      "đã ly hôn",
+        "Ly thân":     "đang ly thân",
     }
     family_context = family_context_map.get(marital_status, marital_status.lower())
 
@@ -45,18 +45,18 @@ def build_confirmation_world(row: dict) -> dict:
     )
 
     return {
-        "age": age,
-        "sex": sex,
-        "life_stage": life_stage,
-        "education": education,
-        "occupation": occupation,
-        "location": f"{zone}, {region}, {country}",
-        "marital_status": marital_status,
-        "family_context": family_context,
-        "skills_summary": skills_summary,
-        "professional": professional_summary,
+        "age":             age,
+        "sex":             sex,
+        "life_stage":      life_stage,
+        "education":       education,
+        "occupation":      occupation,
+        "location":        f"{zone}, {region}, {country}",
+        "marital_status":  marital_status,
+        "family_context":  family_context,
+        "skills_summary":  skills_summary,
+        "professional":    professional_summary,
 
-        "statement": statement,
+        "statement":       statement,
     }
 
 
@@ -74,19 +74,19 @@ def _infer_duty(occupation: str, marital_status: str, age: int) -> str:
         duty_parts.append("tự chủ về tài chính và phát triển bản thân")
     elif marital_status in ("Ly hôn", "Ly thân"):
         duty_parts.append("tự chủ về tài chính và ổn định lại cuộc sống cá nhân sau ly hôn/ly thân")
-
+        
     occ_duty_map = {
-        "Nghỉ hưu": "duy trì sức khỏe để sống độc lập và hỗ trợ thế hệ sau",
-        "Buôn bán / kinh doanh": "duy trì và phát triển hoạt động kinh doanh, tạo thu nhập ổn định",
-        "Kỹ thuật viên / kỹ sư": "đảm bảo chất lượng kỹ thuật và cập nhật kiến thức chuyên môn",
-        "Y tế / dược": "chăm sóc sức khỏe cộng đồng và nâng cao năng lực chuyên môn",
-        "Nghiên cứu / học thuật": "đóng góp tri thức và đào tạo thế hệ kế tiếp",
-        "Nông nghiệp / ngư nghiệp": "duy trì sản xuất và đảm bảo thu nhập cho gia đình",
+        "Nghỉ hưu":                       "duy trì sức khỏe để sống độc lập và hỗ trợ thế hệ sau",
+        "Buôn bán / kinh doanh":          "duy trì và phát triển hoạt động kinh doanh, tạo thu nhập ổn định",
+        "Kỹ thuật viên / kỹ sư":          "đảm bảo chất lượng kỹ thuật và cập nhật kiến thức chuyên môn",
+        "Y tế / dược":                    "chăm sóc sức khỏe cộng đồng và nâng cao năng lực chuyên môn",
+        "Nghiên cứu / học thuật":         "đóng góp tri thức và đào tạo thế hệ kế tiếp",
+        "Nông nghiệp / ngư nghiệp":       "duy trì sản xuất và đảm bảo thu nhập cho gia đình",
         "Công nhân / lao động phổ thông": "hoàn thành công việc và đảm bảo thu nhập ổn định",
-        "Tài xế / giao hàng": "đảm bảo an toàn giao thông và hoàn thành nhiệm vụ vận chuyển",
-        "Freelancer / làm tự do": "xây dựng uy tín nghề nghiệp và duy trì nguồn khách hàng ổn định",
-        "Quản lý / kinh doanh": "lãnh đạo đội nhóm và đạt mục tiêu kinh doanh",
-        "Thất nghiệp / tìm việc": "tìm kiếm việc làm phù hợp và duy trì cuộc sống trong thời gian chờ đợi",
+        "Tài xế / giao hàng":             "đảm bảo an toàn giao thông và hoàn thành nhiệm vụ vận chuyển",
+        "Freelancer / làm tự do":         "xây dựng uy tín nghề nghiệp và duy trì nguồn khách hàng ổn định",
+        "Quản lý / kinh doanh":           "lãnh đạo đội nhóm và đạt mục tiêu kinh doanh",
+        "Thất nghiệp / tìm việc":         "tìm kiếm việc làm phù hợp và duy trì cuộc sống trong thời gian chờ đợi",
     }
     occ_duty = occ_duty_map.get(occupation, "hoàn thành tốt công việc và trách nhiệm hàng ngày")
     duty_parts.append(occ_duty)
@@ -125,7 +125,7 @@ def _infer_belief(persona: str, cultural_background: str, occupation: str, age: 
 
 
 def build_fantasy_world(row: dict) -> dict:
-    duty = _infer_duty(row["occupation"], row["marital_status"], row["age"])
+    duty   = _infer_duty(row["occupation"], row["marital_status"], row["age"])
     desire = _infer_desire(row["career_goals_and_ambitions"])
     belief = _infer_belief(
         row["persona"], row["cultural_background"],
@@ -133,9 +133,9 @@ def build_fantasy_world(row: dict) -> dict:
     )
 
     return {
-        "Bổn phận": duty,
+        "Bổn phận":  duty,
         "Mong muốn": desire,
-        "Niềm tin": belief,
+        "Niềm tin":  belief,
     }
 
 
@@ -154,12 +154,12 @@ if __name__ == "__main__":
     import pandas as pd
     import json
 
-    df = pd.read_csv("../data/sample50.csv")
+    df = pd.read_csv("../../data/sample50.csv")
 
     for i in [2, 5, 15]:
         row = df.iloc[i].to_dict()
         worlds = build_worlds(row)
-        print(f"\n{'=' * 60}")
+        print(f"\n{'='*60}")
         print(f"Person {i}: {row['persona']}...")
         print("\n--- THẾ GIỚI XÁC NHẬN ---")
         print(worlds["xac_nhan"]["statement"])
