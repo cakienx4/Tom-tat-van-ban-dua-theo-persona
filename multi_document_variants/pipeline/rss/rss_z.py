@@ -2,10 +2,10 @@ import re
 import json
 import os
 import hashlib
-from pathlib import Path
-
 from dotenv import load_dotenv
 load_dotenv()
+
+from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 
@@ -15,8 +15,8 @@ SHARED_ROOT = ROOT_DIR / "shared"
 DATA_DIR = MD_ROOT / "data"
 OUTPUT_DIR = MD_ROOT / "output" / "rss_summary"
 
-from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph
-from pipeline.rss.ontology_context_state import lay_ontology_context_cho_nganh
+from multi_document_variants.pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph
+from multi_document_variants.pipeline.rss.ontology_context_state import lay_ontology_context_cho_nganh
 
 _ONTOLOGY_PATH = MD_ROOT / "persona_states.ttl"
 _STATE_GRAPH = load_graph(str(_ONTOLOGY_PATH))
@@ -46,16 +46,11 @@ RSS_PRIORITY_TIE_MARGIN = 0.15
 CHU_DE_WEIGHTS = [1.0, 0.6, 0.4]
 CHU_DE_WEIGHT_FALLBACK = 0.3  # neu chu_de co nhieu hon 3 phan tu
 
-FILTER_DIR = MD_ROOT / "output" / "rss_filter"
-FILTER_TOKENS_UOC_LUONG_MOI_BAI = 30
-FILTER_MAX_TOKENS_SAN = 2048
-
 # max_output_tokens duoc tinh DONG theo so luong tin thuc te (xem tom_tat_rss_cho_persona).
 TOKENS_UOC_LUONG_MOI_BAI = 200  # uoc luong so token can de tom tat 1 tin (CAN HIEU CHINH sau khi test thuc te)
 MAX_OUTPUT_TOKENS_SAN = 4096  # san toi thieu, du cho persona it tin
 MAX_OUTPUT_TOKENS_TRAN = 32768  # tran an toan - PHAI kiem tra dung bang gioi han that cua model dang dung, xem muc "Cần xác nhận" ben duoi
 
-TI_LE_BAO_PHU_TOI_THIEU = 0.7  # ti le toi thieu (so doan thuc te / so_bai) chap nhan duoc, duoi muc nay coi la model tu y bo/gop tin
 TY_LE_TU_COT_LOI = 0.65  # % độ dài dành cho tin đúng chuyên môn (chu_de chính)
 TY_LE_TU_LIEN_QUAN = 0.35  # % còn lại cho tin bối cảnh (chu_de phụ)
 
@@ -192,13 +187,18 @@ def _weight_of_chu_de(index: int) -> float:
 
 
 def xep_hang_bai_cho_persona(persona: dict, articles: list) -> list:
+    """
+    Loc TAT CA bai RSS khop chu_de cua persona (khong gioi han so luong).
+    Thu tu: chu_de uu tien cao truoc (theo vi tri trong list chu_de cua
+    persona), trong tung chu_de xep theo genre_score giam dan.
+    """
     chu_de_list = persona.get("chu_de", [])
     if not chu_de_list:
         return []
 
     theo_chu_de = {cd: [] for cd in chu_de_list}
     for a in articles:
-        if a.get("genre") in theo_chu_de and a.get("genre_score", 0.0) > 0.0:
+        if a.get("genre") in theo_chu_de:
             theo_chu_de[a["genre"]].append(a)
     for cd in theo_chu_de:
         theo_chu_de[cd].sort(key=lambda a: a.get("genre_score", 0.0), reverse=True)
@@ -254,150 +254,10 @@ MUC_DO_CHI_TIET = [
 def _muc_do_cho_tang(idx: int) -> str:
     return MUC_DO_CHI_TIET[min(idx, len(MUC_DO_CHI_TIET) - 1)]
 
-def build_filter_prompt(persona: dict, articles: list) -> str:
-    ds = ""
-    for i, a in enumerate(articles, 1):
-        ds += f"\n{i}. {a.get('title')}\n   Tóm tắt gốc: {a.get('summary')}\n"
-    cau_hoi_kiem_tra = (
-        f"Tin này có phục vụ trực tiếp cho công việc, chuyên môn hoặc nhiệm vụ thực tế của "
-        f"một người làm trong ngành \"{persona.get('nganh_to')} - {persona.get('nganh_nho')}\" "
-        f"hay không? (dựa vào mô tả chung và định hướng công việc trước mắt của người này ở trên)"
-    )
-    prompt = f"""Bạn đang lọc tin RSS cho một cán bộ có hồ sơ công vụ sau:
-
-       - Ngành/lĩnh vực: {persona.get('nganh_to')} - {persona.get('nganh_nho')}
-       - Đơn vị công tác: {persona.get('to_chuc')}
-       - Mô tả chung: {persona.get('mo_ta_chung')}
-       - Định hướng công việc trước mắt: {persona.get('cau_hoi_truoc_mat')}
-
-       Câu hỏi kiểm tra cho MỖI tin: "{cau_hoi_kiem_tra}"
-
-       - "giu": CHỈ khi tin có ý nghĩa trực tiếp với công việc/chuyên môn của người này — ví dụ
-         chính sách, quy định, số liệu, sự kiện, xu hướng thuộc đúng ngành họ đang làm, mà họ cần
-         biết để phục vụ công việc.
-       - "ha": tin có nhắc đến từ khóa liên quan đến ngành của họ, nhưng chỉ mang tính CHUYỆN CỦA
-         MỘT DOANH NGHIỆP, TỔ CHỨC HOẶC CÁ NHÂN CỤ THỂ, không có ý nghĩa chung với công việc của
-         người này. Ví dụ: một công ty tư nhân báo lãi/lỗ, cổ phiếu một doanh nghiệp tăng/giảm,
-         một câu lạc bộ thể thao gặp khủng hoảng tài chính, tài sản cá nhân của người nổi tiếng
-         thay đổi, một dự án cụ thể của một chủ đầu tư mở bán — dù có nhắc từ khóa cùng ngành,
-         những tin này không phục vụ công việc chung của người này.
-       - "loai": hoàn toàn không liên quan đến lĩnh vực của người này.
-
-       QUY TẮC MẶC ĐỊNH: nếu phân vân giữa "giu" và "ha", LUÔN chọn "ha". "giu" phải là lựa chọn
-       có chủ đích, không phải lựa chọn an toàn.
-
-       Danh sách tin:
-       {ds}
-
-       Chỉ trả về DUY NHẤT một mảng JSON, không thêm chữ nào khác, không dùng dấu ```. Mỗi phần
-       tử có đúng 2 trường:
-       [
-         {{"stt": 1, "hanh_dong": "giu"}},
-         {{"stt": 2, "hanh_dong": "ha"}}
-       ]
-
-       Phải trả đủ {len(articles)} phần tử, đúng theo số thứ tự đã đánh ở trên, không được bỏ sót.
-       """.strip()
-
-    return prompt
-
-def loc_bai_lien_quan_persona(persona: dict, ranked_articles: list, client,
-                               model_name: str = SUMMARY_MODEL_NAME) -> tuple:
-    """
-    Goi LLM 1 lan de loc lai danh sach bai da xep theo tu khoa.
-    Tra ve tuple (bai_giu, bai_ha). bai_ha se duoc gop chung voi nhom
-    "tin lien quan gian tiep" o buoc tom tat cuoi. Bai bi danh dau "loai"
-    thi khong xuat hien o ca 2 danh sach nay.
-    """
-    if not ranked_articles:
-        return [], []
-
-    prompt = build_filter_prompt(persona, ranked_articles)
-    max_tokens = min(
-        MAX_OUTPUT_TOKENS_TRAN,
-        max(FILTER_MAX_TOKENS_SAN, len(ranked_articles) * FILTER_TOKENS_UOC_LUONG_MOI_BAI),
-    )
-
-    def _call():
-        return client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config={
-                "temperature": 0.0,
-                "max_output_tokens": max_tokens,
-            },
-        )
-
-    response = retry_generate(_call)
-    text = response.text.strip()
-    text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-
-    matches = re.findall(
-        r'\{\s*"stt"\s*:\s*(\d+)\s*,\s*"hanh_dong"\s*:\s*"(\w+)"\s*\}',
-        text,
-    )
-    hanh_dong_theo_stt = {int(stt): hanh_dong for stt, hanh_dong in matches}
-
-    if not hanh_dong_theo_stt:
-        print(f"[loc_bai_lien_quan_persona] KHONG LAY DUOC OBJECT NAO TU RESPONSE, giu nguyen tat ca.")
-        print(f"[loc_bai_lien_quan_persona] RAW RESPONSE (500 ky tu dau):\n{text[:500]}")
-        return ranked_articles, []
-
-    if len(hanh_dong_theo_stt) < len(ranked_articles):
-        print(
-            f"[loc_bai_lien_quan_persona] CANH BAO: chi lay duoc "
-            f"{len(hanh_dong_theo_stt)}/{len(ranked_articles)} tin (co the do bi cat cut), "
-            f"cac tin con lai mac dinh giu."
-        )
-
-    bai_giu = []
-    bai_ha = []
-    for i, a in enumerate(ranked_articles, 1):
-        hanh_dong = hanh_dong_theo_stt.get(i, "giu")  # thieu thi mac dinh giu, tranh mat tin oan
-        if hanh_dong == "giu":
-            bai_giu.append(a)
-        elif hanh_dong == "ha":
-            bai_ha.append(a)
-        # hanh_dong == "loai" thi khong dua vao dau ca
-
-    return bai_giu, bai_ha
-
-
-def loc_bai_lien_quan_persona_co_cache(persona: dict, ranked_articles: list, client,
-                                        model_name: str = SUMMARY_MODEL_NAME) -> tuple:
-    """
-    Giong loc_bai_lien_quan_persona nhung co luu cache ra file trong
-    FILTER_DIR, de khong phai goi lai LLM moi lan chay lai script.
-    """
-    FILTER_DIR.mkdir(parents=True, exist_ok=True)
-    cache_path = FILTER_DIR / f"{persona.get('id')}.json"
-
-    if cache_path.exists():
-        with open(cache_path, encoding="utf-8") as f:
-            cache = json.load(f)
-        bai_theo_link = {a.get("link"): a for a in ranked_articles}
-        bai_giu = [bai_theo_link[link] for link in cache["giu"] if link in bai_theo_link]
-        bai_ha = [bai_theo_link[link] for link in cache["ha"] if link in bai_theo_link]
-        return bai_giu, bai_ha
-
-    bai_giu, bai_ha = loc_bai_lien_quan_persona(persona, ranked_articles, client, model_name)
-
-    with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "giu": [a.get("link") for a in bai_giu],
-                "ha": [a.get("link") for a in bai_ha],
-            },
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
-
-    return bai_giu, bai_ha
 
 def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list = None) -> str:
     day_du = can_van_phong_day_du(persona, ranked_articles)
-    ontology_ctx = lay_ontology_context_cho_nganh(persona.get("nganh_to", ""))
+    ontology_ctx = lay_ontology_context_cho_nganh(_STATE_GRAPH, persona.get("nganh_to", ""))
     nhom_tin = nhom_tin_theo_chu_de(persona, ranked_articles)
     tin_gian_tiep = tin_gian_tiep or []
 
@@ -409,35 +269,12 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
             "Bài viết PHẢI bắt đầu bằng một dòng TIÊU ĐỀ in đậm, viết hoa hoặc in đậm, "
             "ngắn gọn, nêu khái quát chủ đề bản tin — đây là dòng đầu tiên của toàn văn bản, "
             "đứng TRƯỚC phần thân bài. Sau tiêu đề mới đến thân bài viết theo bố cục đầy đủ, "
-            "chuyên nghiệp, gồm mở bài, thân bài và kết luận."
+            "chuyên nghiệp. Không cần đoạn tổng kết cuối bài trừ khi phong cách kết bài bên dưới yêu cầu."
         )
     else:
         yeu_cau_van_phong = (
             "Bài viết KHÔNG có tiêu đề — viết thẳng vào nội dung ngay từ câu/dòng đầu tiên, "
             "ngắn gọn, dễ đọc."
-        )
-
-    if day_du:
-        yeu_cau_bo_cuc = f"""- BỐ CỤC BẮT BUỘC gồm 3 phần rõ ràng, cách nhau bằng dấu xuống dòng:
-        1. ĐOẠN MỞ BÀI (ngay sau tiêu đề, TÁCH RIÊNG thành một đoạn độc lập, không phải đoạn
-           tóm tắt của tin nào): 2-3 câu nêu khái quát những nhóm chủ đề nổi bật sẽ được đề cập
-           trong bài, không đi vào chi tiết số liệu cụ thể của từng tin. Phong cách viết câu
-           đầu tiên: {opening_style}
-        2. THÂN BÀI: các đoạn tóm tắt từng tin theo đúng nhóm chủ đề (xem chi tiết bên dưới).
-           Khi CHUYỂN từ nhóm chủ đề này sang nhóm chủ đề khác, đoạn đầu tiên của nhóm mới
-           PHẢI mở đầu bằng một câu dẫn ngắn (không quá 1 câu) báo hiệu đang chuyển sang chủ
-           đề mới, nêu tên nhóm chủ đề đó một cách tự nhiên trong câu văn — câu dẫn này nằm
-           chung trong đoạn tóm tắt tin đầu tiên của nhóm, KHÔNG tính là một đoạn riêng.
-        3. ĐOẠN KẾT LUẬN (TÁCH RIÊNG thành một đoạn độc lập, đứng sau tất cả các nhóm chủ đề
-           và tin gián tiếp, không phải đoạn tóm tắt của tin nào): 2-4 câu tổng kết lại 2-3
-           điểm quan trọng nhất trong toàn bài theo đúng thứ tự ưu tiên, diễn đạt lại ngắn gọn
-           hơn (không lặp nguyên văn câu đã viết ở thân bài). Phong cách viết câu cuối cùng:
-           {closing_style}"""
-    else:
-        yeu_cau_bo_cuc = (
-            f"- Không cần bố cục mở-thân-kết tách riêng — viết thẳng vào nội dung tin theo "
-            f"đúng thứ tự nhóm chủ đề. Câu đầu tiên của toàn bài áp dụng phong cách: "
-            f"{opening_style}. Câu cuối cùng của toàn bài áp dụng phong cách: {closing_style}."
         )
 
     cam_cum_tu = ", ".join(f"'{p}'" for p in BANNED_PHRASES)
@@ -490,9 +327,13 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
     {khoi_tin_text}
     {khoi_gian_tiep_text}
 
-    Yêu cầu bắt buộc chung cho toàn bài: 
-    - {yeu_cau_bo_cuc}
-    
+    Yêu cầu bắt buộc chung cho toàn bài:
+
+    - CÁCH MỞ BÀI (áp dụng cho câu đầu tiên của đoạn văn ĐẦU TIÊN — tức là câu ngay sau tiêu đề
+  nếu có tiêu đề, hoặc câu đầu văn bản nếu không có tiêu đề): {opening_style}
+
+    - CÁCH KẾT BÀI (áp dụng cho đoạn văn CUỐI CÙNG, bắt buộc theo đúng kiểu này): {closing_style}
+
     - {yeu_cau_van_phong}
 
     - CẤU TRÚC BẮT BUỘC: MỖI TIN được viết thành MỘT ĐOẠN VĂN RIÊNG BIỆT, xuống dòng giữa các
@@ -500,10 +341,9 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
       cùng 1 đoạn. KHÔNG đặt tiêu đề kiểu "Tin 1:", KHÔNG gạch đầu dòng — đoạn văn tự nhiên,
       chỉ là xuống dòng phân tách rõ ràng giữa các tin để dễ quan sát.
 
-    - Trong CÙNG một nhóm chủ đề, các đoạn tin không bắt buộc phải liền mạch với nhau như
-      một bài luận — ưu tiên tóm tắt đầy đủ, rõ ràng từng tin hơn là ưu tiên chuyển ý mượt
-      giữa các tin trong cùng nhóm. Câu dẫn chuyển ý CHỈ bắt buộc khi chuyển sang nhóm chủ đề
-      mới (xem yêu cầu bố cục ở trên).
+    - Đoạn văn có thể mở đầu bằng một câu liên hệ ngắn tới đoạn trước nếu thấy tự nhiên,
+      nhưng KHÔNG bắt buộc phải liền mạch xuyên suốt như một bài luận — ưu tiên tóm tắt đầy
+      đủ, rõ ràng từng tin hơn là ưu tiên chuyển ý mượt giữa các tin.
 
     - TUYỆT ĐỐI KHÔNG dùng các cụm sau ở bất kỳ đâu trong bài: {cam_cum_tu}.
 
@@ -542,9 +382,9 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
 
 def tom_tat_rss_cho_persona(persona: dict, articles: list, client,
                             model_name: str = SUMMARY_MODEL_NAME) -> dict:
-    ranked_truoc_loc = xep_hang_bai_cho_persona(persona, articles)
+    ranked = xep_hang_bai_cho_persona(persona, articles)
 
-    if not ranked_truoc_loc:
+    if not ranked:
         return {
             "id": persona.get("id"),
             "summary": "",
@@ -552,18 +392,8 @@ def tom_tat_rss_cho_persona(persona: dict, articles: list, client,
             "note": "Không có tin nào khớp chu_de của persona này.",
         }
 
-    ranked, bai_bi_ha = loc_bai_lien_quan_persona_co_cache(persona, ranked_truoc_loc, client)
-
-    if not ranked and not bai_bi_ha:
-        return {
-            "id": persona.get("id"),
-            "summary": "",
-            "ranked_articles": [],
-            "note": "Tất cả tin khớp chu_de đều bị lọc bỏ vì không thực sự hữu ích cho persona này.",
-        }
-
     nhom_tin = nhom_tin_theo_chu_de(persona, ranked)
-    tin_gian_tiep = bai_bi_ha + tim_tin_lien_quan_gian_tiep(persona, articles, ranked)
+    tin_gian_tiep = tim_tin_lien_quan_gian_tiep(persona, articles, ranked)
 
     prompt = build_rss_prompt(persona, ranked, tin_gian_tiep)
 
@@ -594,9 +424,7 @@ def tom_tat_rss_cho_persona(persona: dict, articles: list, client,
         pass
 
     summary = response.text.strip()
-    so_doan_thuc_te = len([doan for doan in summary.split("\n\n") if doan.strip()])
-    so_tin_chinh = len(ranked)
-    ti_le_bao_phu = so_doan_thuc_te / so_tin_chinh if so_tin_chinh else 0.0
+
     notes = []
     if not nhom_tin or nhom_tin[0]["chu_de"] != persona.get("chu_de", [""])[0]:
         notes.append(
@@ -609,20 +437,11 @@ def tom_tat_rss_cho_persona(persona: dict, articles: list, client,
             f"{max_tokens} token (ước lượng từ {so_bai} tin) — cần chạy lại persona này "
             f"riêng với TOKENS_UOC_LUONG_MOI_BAI hoặc MAX_OUTPUT_TOKENS_TRAN cao hơn."
         )
-    if ti_le_bao_phu < TI_LE_BAO_PHU_TOI_THIEU:
-        notes.append(
-            f"CẢNH BÁO: bài viết chỉ có {so_doan_thuc_te} đoạn, trong khi nhóm tin chính "
-            f"(bắt buộc mỗi tin 1 đoạn riêng) có {so_tin_chinh} tin — có khả năng model đã "
-            f"tự gộp hoặc bỏ bớt tin chính dù prompt cấm điều này."
-        )
+
     ket_qua = {
         "id": persona.get("id"),
         "summary": summary,
         "so_luong_tin_da_dua_vao": so_bai,
-        "so_nhom_chu_de": len(nhom_tin),
-        "do_dai_prompt_ky_tu": len(prompt),
-        "so_doan_thuc_te": so_doan_thuc_te,
-        "ti_le_bao_phu": round(ti_le_bao_phu, 2),
         "ranked_articles": [
             {"title": a["title"], "genre": a["genre"], "genre_score": a["genre_score"], "link": a.get("link")}
             for a in ranked
@@ -661,10 +480,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    with open(DATA_DIR / "vnexpress_rss_snapshot.json", encoding="utf-8") as f:
+    with open(DATA_DIR / "vnexpress_rss_snapshot_2707.json", encoding="utf-8") as f:
         articles = json.load(f)
 
-    with open(DATA_DIR / "profile" / "state_profiles.json", encoding="utf-8") as f:
+    with open(DATA_DIR / "profile" / "state_profiles_enrich_sample.json", encoding="utf-8") as f:
         personas = json.load(f)
 
     articles = gan_genre_cho_bai(articles)

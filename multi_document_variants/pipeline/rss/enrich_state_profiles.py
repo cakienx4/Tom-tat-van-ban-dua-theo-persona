@@ -5,7 +5,7 @@ import time
 import os
 from google import genai
 from dotenv import load_dotenv
-from pipeline.rss.generate_state_profiles import save_csv
+from multi_document_variants.pipeline.rss.generate_state_profiles import save_csv
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]

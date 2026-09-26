@@ -6,9 +6,6 @@ from pathlib import Path
 MAX_RETRY_ATTEMPTS = 5
 SUMMARY_MODEL_NAME = "gemini-3.1-flash-lite"
 
-OSS_HOST = "https://text-sum-gpt-oss-120b-runai-text-sum.runai-inference.cyberspace.vn"
-OSS_MODEL_NAME = "gpt-oss-120b"
-
 NGANH_TO_SANG_GENRE = {
     "Công chức hành chính nhà nước": ["Chính trị / Pháp luật", "Thời sự / Xã hội"],
     "Quân đội": ["Quốc phòng / An ninh", "Thời sự / Xã hội"],
