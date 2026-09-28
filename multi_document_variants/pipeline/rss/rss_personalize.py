@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -57,11 +58,11 @@ MAX_OUTPUT_TOKENS_TRAN = 65536  # tran an toan - PHAI kiem tra dung bang gioi ha
 
 TI_LE_BAO_PHU_TOI_THIEU = 0.85  # ti le toi thieu (so doan thuc te / so_bai) chap nhan duoc, duoi muc nay coi la model tu y bo/gop tin
 
-OPENING_STYLES = [
-    "Mở thẳng bằng số liệu hoặc sự kiện cụ thể nhất trong tin xếp hạng cao nhất, không dẫn dắt, không nêu bối cảnh chung.",
-    "Mở bằng cách liên hệ trực tiếp tới mối quan tâm trước mắt hoặc nhiệm vụ hiện tại của người đọc, rồi mới dẫn vào tin liên quan.",
-    "Mở bằng một nhận định hoặc câu hỏi ngắn liên quan trực tiếp đến công việc của người đọc, sau đó lập tức nối vào tin số 1.",
-    "Mở bằng cách tóm tắt nhanh diễn biến chính của tin số 1 dưới dạng một câu khẳng định, không dùng từ 'bối cảnh' hay 'trong bối cảnh'.",
+OPENING_STYLES_MO_BAI = [
+    "Mở bằng một câu nêu bao quát các nhóm vấn đề/xu hướng nổi bật sẽ xuất hiện trong bài, KHÔNG nêu tên sự kiện cụ thể, KHÔNG nêu số liệu, KHÔNG nhắc đến bất kỳ tin riêng lẻ nào.",
+    "Mở bằng cách nêu mối liên hệ giữa các nhóm chủ đề sắp trình bày với định hướng công việc trước mắt của người đọc, giữ ở mức khái quát, KHÔNG đi vào nội dung của tin cụ thể nào.",
+    "Mở bằng một nhận định ngắn gọn về bối cảnh chung bao trùm các nhóm tin sắp tóm tắt, KHÔNG nêu tên bất kỳ sự kiện hay tin cụ thể nào.",
+    "Mở bằng cách nêu khái quát (không liệt kê tên tin) các mảng nội dung chính sẽ được đề cập, theo đúng thứ tự ưu tiên nhóm chủ đề, KHÔNG đi vào chi tiết của tin nào.",
 ]
 CLOSING_STYLES = [
     "Kết bằng một câu chốt nêu điểm cần lưu ý gần nhất, đặt NGAY SAU phần tóm tắt các ý chính, không dùng cụm 'nhìn chung' hay 'kết lại'.",
@@ -69,6 +70,7 @@ CLOSING_STYLES = [
     "Kết bằng cách nêu điểm cần theo dõi tiếp theo, đặt NGAY SAU phần tóm tắt các ý chính — câu này KHÔNG được thay thế phần tóm tắt.",
     "Kết bằng một câu nhấn mạnh mức độ ưu tiên của ý quan trọng nhất vừa tóm tắt, không lặp nguyên văn câu đã viết ở thân bài.",
 ]
+
 
 def nhom_tin_theo_chu_de(persona: dict, ranked_articles: list) -> list:
     """
@@ -85,12 +87,6 @@ def nhom_tin_theo_chu_de(persona: dict, ranked_articles: list) -> list:
 
 
 def tim_tin_lien_quan_gian_tiep(persona: dict, articles: list, da_chon: list) -> list:
-    """
-    Tim TAT CA tin NGOAI chu_de cua persona nhung co overlap gian tiep (theo
-    config/genre_overlap.json) voi it nhat 1 chu_de cua persona, vuot
-    nguong NGUONG_LIEN_QUAN_GIAN_TIEP. Khong gioi han so luong - lay het,
-    xep theo do lien quan (overlap, roi genre_score) giam dan.
-    """
     chu_de_list = persona.get("chu_de", [])
     if not chu_de_list:
         return []
@@ -114,10 +110,10 @@ def tim_tin_lien_quan_gian_tiep(persona: dict, articles: list, da_chon: list) ->
         reverse=True
     )
 
-    # Số tin gián tiếp tối đa = 1/2 số tin chính, nhưng luôn ít nhất 20 tin
+    # Số tin gián tiếp tối đa = 1/3 số tin chính, tối thiểu 3, tối đa 10 (chưa tính tin bị hạ ở bước lọc)
     max_tin_gian_tiep = min(
-        50,  # tối đa 50 tin
-        max(20, len(da_chon) // 2)
+        10,  # tối đa 10 tin
+        max(3, len(da_chon) // 3)
     )
 
     return [a for _, a in ung_vien[:max_tin_gian_tiep]]
@@ -131,10 +127,17 @@ CHUC_VU_LANH_DAO_KEYWORDS = [
 GENRE_LUON_DAY_DU = {"Chính trị / Pháp luật", "Quốc phòng / An ninh"}
 
 OPENING_STYLES = [
-    "Mở thẳng bằng số liệu hoặc sự kiện cụ thể nhất trong tin xếp hạng cao nhất, không dẫn dắt, không nêu bối cảnh chung. Mở bằng cách liên hệ trực tiếp tới mối quan tâm trước mắt hoặc nhiệm vụ hiện tại của người đọc, rồi mới dẫn vào tin liên quan. Mở bằng một nhận định hoặc câu hỏi ngắn liên quan trực tiếp đến công việc của người đọc, sau đó lập tức nối vào tin số 1. Mở bằng cách tóm tắt nhanh diễn biến chính của tin số 1 dưới dạng một câu khẳng định, không dùng từ 'bối cảnh' hay 'trong bối cảnh'."
+    "Mở thẳng bằng số liệu hoặc sự kiện cụ thể nhất trong tin xếp hạng cao nhất, không dẫn dắt, không nêu bối cảnh chung.",
+    "Mở bằng cách liên hệ trực tiếp tới mối quan tâm trước mắt hoặc nhiệm vụ hiện tại của người đọc, rồi mới dẫn vào tin liên quan.",
+    "Mở bằng một nhận định hoặc câu hỏi ngắn liên quan trực tiếp đến công việc của người đọc, sau đó lập tức nối vào tin số 1.",
+    "Mở bằng cách tóm tắt nhanh diễn biến chính của tin số 1 dưới dạng một câu khẳng định, không dùng từ 'bối cảnh' hay 'trong bối cảnh'.",
 ]
-CLOSING_STYLES = [
-    "Kết bằng một câu chốt ngắn nêu điểm cần lưu ý gần nhất, không tổng kết lại toàn bài, không dùng cụm 'nhìn chung' hay 'kết lại'. Kết bằng cách quay lại liên hệ với tin đầu tiên, không liệt kê lại các ý đã nêu. Kết đột ngột ở tin cuối cùng được đề cập, không thêm đoạn tổng kết riêng. Kết bằng một câu hỏi mở hoặc một điểm cần theo dõi tiếp, ngắn gọn, không điểm lại nội dung."
+# Dung cho persona KHONG can van phong day du (khong co doan ket luan rieng)
+CLOSING_STYLES_KHONG_DAY_DU = [
+    "Kết bằng một câu chốt ngắn nêu điểm cần lưu ý gần nhất, đặt sau khi đã tóm tắt đủ tất cả các tin, không tổng kết lại toàn bài, không dùng cụm 'nhìn chung' hay 'kết lại'.",
+    "Kết bằng cách quay lại liên hệ với tin đầu tiên, đặt sau khi đã tóm tắt đủ tất cả các tin, không liệt kê lại các ý đã nêu.",
+    "Kết đột ngột ở tin cuối cùng được đề cập, không thêm đoạn tổng kết riêng.",
+    "Kết bằng một điểm cần theo dõi tiếp, ngắn gọn, đặt sau khi đã tóm tắt đủ tất cả các tin, không điểm lại nội dung.",
 ]
 
 BANNED_PHRASES = [
@@ -271,6 +274,7 @@ MUC_DO_CHI_TIET = [
 def _muc_do_cho_tang(idx: int) -> str:
     return MUC_DO_CHI_TIET[min(idx, len(MUC_DO_CHI_TIET) - 1)]
 
+
 def build_filter_prompt(persona: dict, articles: list) -> str:
     ds = ""
     for i, a in enumerate(articles, 1):
@@ -318,8 +322,9 @@ def build_filter_prompt(persona: dict, articles: list) -> str:
 
     return prompt
 
+
 def loc_bai_lien_quan_persona(persona: dict, ranked_articles: list, client,
-                               model_name: str = SUMMARY_MODEL_NAME) -> tuple:
+                              model_name: str = SUMMARY_MODEL_NAME) -> tuple:
     """
     Goi LLM 1 lan de loc lai danh sach bai da xep theo tu khoa.
     Tra ve tuple (bai_giu, bai_ha). bai_ha se duoc gop chung voi nhom
@@ -378,7 +383,7 @@ def loc_bai_lien_quan_persona(persona: dict, ranked_articles: list, client,
 
 
 def loc_bai_lien_quan_persona_co_cache(persona: dict, ranked_articles: list, client,
-                                        model_name: str = SUMMARY_MODEL_NAME) -> tuple:
+                                       model_name: str = SUMMARY_MODEL_NAME) -> tuple:
     """
     Giong loc_bai_lien_quan_persona nhung co luu cache ra file trong
     FILTER_DIR, de khong phai goi lai LLM moi lan chay lai script.
@@ -409,14 +414,22 @@ def loc_bai_lien_quan_persona_co_cache(persona: dict, ranked_articles: list, cli
 
     return bai_giu, bai_ha
 
+
 def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list = None) -> str:
     day_du = can_van_phong_day_du(persona, ranked_articles)
     ontology_ctx = lay_ontology_context_cho_nganh(persona.get("nganh_to", ""))
     nhom_tin = nhom_tin_theo_chu_de(persona, ranked_articles)
     tin_gian_tiep = tin_gian_tiep or []
 
-    opening_style = _chon_style(persona.get("id", ""), OPENING_STYLES)
-    closing_style = _chon_style(persona.get("id", "") + "_close", CLOSING_STYLES)
+    opening_style = (
+        _chon_style(persona.get("id", ""), OPENING_STYLES_MO_BAI)
+        if day_du
+        else _chon_style(persona.get("id", ""), OPENING_STYLES)
+    )
+    closing_style = _chon_style(
+        persona.get("id", "") + "_close",
+        CLOSING_STYLES if day_du else CLOSING_STYLES_KHONG_DAY_DU,
+    )
 
     if day_du:
         yeu_cau_van_phong = (
@@ -438,6 +451,9 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
            tóm tắt của tin nào): 2-3 câu nêu khái quát những nhóm chủ đề nổi bật sẽ được đề cập
            trong bài, không đi vào chi tiết số liệu cụ thể của từng tin. Phong cách viết câu
            đầu tiên: {opening_style}
+           BẮT BUỘC: đoạn này phải kết thúc và XUỐNG DÒNG TRỐNG trước khi đoạn tóm tắt tin đầu
+           tiên (thuộc THÂN BÀI) bắt đầu — hai đoạn này không được viết dính liền hoặc lồng
+           vào nhau dưới bất kỳ hình thức nào.
            LƯU Ý QUAN TRỌNG: dù đoạn mở bài có nhắc tới tin xếp hạng cao nhất, tin đó VẪN PHẢI
            có một đoạn văn RIÊNG, đầy đủ trong phần THÂN BÀI như mọi tin khác cùng nhóm chủ đề
            — đoạn mở bài chỉ là câu dẫn ngắn, KHÔNG được thay thế cho đoạn tóm tắt đầy đủ của
@@ -447,16 +463,41 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
            PHẢI mở đầu bằng một câu dẫn ngắn (không quá 1 câu) báo hiệu đang chuyển sang chủ
            đề mới, nêu tên nhóm chủ đề đó một cách tự nhiên trong câu văn — câu dẫn này nằm
            chung trong đoạn tóm tắt tin đầu tiên của nhóm, KHÔNG tính là một đoạn riêng.
-           - Ví dụ ĐÚNG (1 đoạn): "Chuyển sang nhóm Thời sự - Xã hội, Bộ Nội vụ đề xuất bỏ
+           QUAN TRỌNG: NHÓM CHỦ ĐỀ ĐẦU TIÊN ("{nhom_tin[0]['chu_de'] if nhom_tin else ''}")
+           KHÔNG được có câu dẫn kiểu "Chuyển sang nhóm..." — nhóm này đã được đoạn mở bài
+           giới thiệu ngầm rồi, tin đầu tiên của bài viết thẳng vào nội dung. Câu dẫn CHỈ áp
+           dụng khi thực sự đổi từ nhóm chủ đề A sang nhóm chủ đề B khác — giữa các tin CÙNG
+           một nhóm (ví dụ tin thứ 2, thứ 3 trong cùng nhóm đầu tiên) TUYỆT ĐỐI KHÔNG được lặp
+           lại câu dẫn "Chuyển sang nhóm..." của nhóm đó.
+           Thứ tự các nhóm chủ đề theo đúng trình tự sau: {" -> ".join(n["chu_de"] for n in nhom_tin)}.
+           Số câu dẫn chuyển nhóm BẮT BUỘC phải có, chính xác bằng {max(0, len(nhom_tin) - 1)}
+           (bằng số nhóm trừ 1, vì nhóm đầu tiên không cần câu dẫn) — không nhiều hơn, không
+           ít hơn.
+           Ví dụ ĐÚNG (1 đoạn): "Chuyển sang nhóm Thời sự - Xã hội, Bộ Nội vụ đề xuất bỏ
            thời hạn tối đa 12 tháng đối với văn bản ủy quyền nhận lương hưu..."
-           - Ví dụ SAI: để câu "Chuyển sang nhóm Thời sự - Xã hội..." đứng một mình thành
+           Ví dụ SAI: để câu "Chuyển sang nhóm Thời sự - Xã hội..." đứng một mình thành
            một đoạn, rồi mới xuống dòng sang đoạn tóm tắt tin.
+           Ví dụ SAI khác: viết "Chuyển sang nhóm Tài chính - Kế toán" ở tin thứ 2 trong khi
+           tin thứ 1 cũng đã thuộc nhóm Tài chính - Kế toán (không có chuyển nhóm thật).
         3. ĐOẠN KẾT LUẬN (TÁCH RIÊNG thành một đoạn độc lập, đứng sau tất cả các nhóm chủ đề
            và tin gián tiếp, không phải đoạn tóm tắt của tin nào): 2-4 câu tổng kết lại 2-3
            điểm quan trọng nhất trong toàn bài theo đúng thứ tự ưu tiên, diễn đạt lại ngắn gọn
            hơn (không lặp nguyên văn câu đã viết ở thân bài). Phong cách viết câu cuối cùng:
            {closing_style}"""
     else:
+        # nhanh nay truoc day KHONG co yeu cau cau dan chuyen nhom, trong khi judge
+        # (bo_cuc_uu_tien) lai kiem tra cau dan -> luon fail voi persona nhieu nhom.
+        chuyen_nhom = ""
+        if len(nhom_tin) >= 2:
+            chuyen_nhom = (
+                f" CHUYỂN NHÓM CHỦ ĐỀ: thứ tự các nhóm chính là "
+                f"{' -> '.join(n['chu_de'] for n in nhom_tin)}. Khi chuyển từ nhóm này sang nhóm "
+                f"kế tiếp, đoạn tin ĐẦU TIÊN của nhóm mới PHẢI mở đầu bằng một câu dẫn ngắn (không "
+                f"quá 1 câu) nêu tên nhóm chủ đề mới một cách tự nhiên (ví dụ: \"Chuyển sang nhóm "
+                f"...,\"), viết dính liền trong đoạn đó — KHÔNG tách thành đoạn riêng, KHÔNG tính là "
+                f"một tin. Nhóm đầu tiên KHÔNG có câu dẫn; các tin cùng một nhóm KHÔNG lặp lại câu "
+                f"dẫn. Số câu dẫn bắt buộc đúng bằng {len(nhom_tin) - 1}."
+            )
         yeu_cau_bo_cuc = (
             f"- Không cần bố cục mở-thân-kết tách riêng — viết thẳng vào nội dung tin theo "
             f"đúng thứ tự nhóm chủ đề. Câu đầu tiên của toàn bài áp dụng phong cách: "
@@ -464,6 +505,7 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
             f"LƯU Ý: nếu câu đầu tiên đã nhắc tới nội dung của tin xếp hạng cao nhất, tin đó VẪN "
             f"PHẢI được tóm tắt đầy đủ ở đoạn riêng của nó theo đúng vị trí trong nhóm chủ đề — "
             f"câu mở đầu không thay thế cho đoạn tóm tắt của tin đó."
+            f"{chuyen_nhom}"
         )
 
     cam_cum_tu = ", ".join(f"'{p}'" for p in BANNED_PHRASES)
@@ -492,23 +534,25 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
     Yêu cầu: {_muc_do_cho_tang(idx)}{khuynh_huong}
     """
 
-    khoi_gian_tiep_text = f"""
-    NHÓM TIN LIÊN QUAN GIÁN TIẾP (ngoài chủ đề chính của người này, nhưng có liên hệ nhẹ,
-    gồm {len(tin_gian_tiep)} tin):
-    {_dinh_dang_danh_sach_tin(tin_gian_tiep, dung_full_content=False)}
-    Yêu cầu:
-        - MỖI đoạn trong nhóm này (kể cả khi bị chia thành nhiều đoạn) đều PHẢI bắt đầu bằng
-          một cụm từ ngắn báo hiệu đây là tin ngoài chuyên môn chính, ví dụ "Các tin khác đáng
-          chú ý:", "Về [chủ đề X]:", "Liên quan đến [chủ đề Y],". KHÔNG được để bất kỳ đoạn nào
-          trong nhóm này bắt đầu thẳng vào nội dung tin mà không có cụm dẫn nhận biết.
-        - Không cần mỗi tin một đoạn.
-        - Nếu số tin trong nhóm này VƯỢT QUÁ 15 tin, PHẢI chia thành NHIỀU đoạn nhỏ theo
-          từng nhóm chủ đề/sự kiện liên quan (mỗi đoạn gộp khoảng 5-10 tin cùng chủ đề hoặc
-          cùng sự kiện) — KHÔNG được nén toàn bộ vào 1 đoạn duy nhất.
-        - Trong mỗi đoạn, mỗi tin chỉ giữ đúng ý quan trọng nhất (khoảng 1 câu/tin).
-        - Nếu nhiều tin nói về cùng một sự kiện hoặc cùng một chủ đề thì được phép gộp thành một câu hoặc một đoạn ngắn.
-        - Mục tiêu là giúp người đọc nắm nhanh bối cảnh, không phải liệt kê toàn bộ, nhưng vẫn phải bao quát được đa số các nhóm chủ đề xuất hiện trong danh sách tin dưới đây.
-    """
+    khoi_gian_tiep_text = ""
+    if tin_gian_tiep:
+        khoi_gian_tiep_text = f"""
+            NHÓM TIN LIÊN QUAN GIÁN TIẾP (ngoài chủ đề chính của người này, nhưng có liên hệ nhẹ,
+            gồm {len(tin_gian_tiep)} tin):
+            {_dinh_dang_danh_sach_tin(tin_gian_tiep, dung_full_content=False)}
+            Yêu cầu:
+        - Đây KHÔNG phải phần trọng tâm của bài — CHỈ giữ lại những tin có giá trị tham khảo
+          thực sự rõ ràng đối với công việc của người này; MẠNH DẠN bỏ hẳn những tin chỉ liên
+          quan lỏng lẻo hoặc không mang lại giá trị tham khảo cụ thể, kể cả khi phải bỏ nguyên
+          một nhóm chủ đề trong danh sách trên.
+        - Tổng độ dài của TOÀN BỘ nhóm này không vượt quá 1-2 đoạn văn ngắn cho cả bài — ưu
+          tiên SÚC TÍCH hơn là cố gắng nhắc đến nhiều nhóm chủ đề.
+        - MỖI đoạn trong nhóm này đều PHẢI bắt đầu bằng một cụm từ ngắn báo hiệu đây là tin
+          ngoài chuyên môn chính, ví dụ "Các tin khác đáng chú ý:", "Về [chủ đề X]:".
+        - Trong mỗi đoạn, mỗi tin chỉ giữ đúng ý quan trọng nhất (khoảng 1 câu/tin), không mô
+          tả chi tiết.
+        - Nếu nhiều tin nói về cùng một sự kiện hoặc cùng một chủ đề thì gộp thành một câu.
+            """
 
     prompt = f"""{ontology_section}Bạn đang viết một VĂN BẢN TÓM TẮT TIN TỨC CÁ NHÂN HÓA hàng ngày cho một người có hồ sơ sau:
 
@@ -521,13 +565,14 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
 
     Yêu cầu bắt buộc chung cho toàn bài: 
     - {yeu_cau_bo_cuc}
-    
+
     - {yeu_cau_van_phong}
 
     - CẤU TRÚC BẮT BUỘC: MỖI TIN được viết thành MỘT ĐOẠN VĂN RIÊNG BIỆT, xuống dòng giữa các
       đoạn (mỗi đoạn tương ứng đúng 1 tin trong danh sách trên). KHÔNG gộp 2 tin trở lên vào
-      cùng 1 đoạn. KHÔNG đặt tiêu đề kiểu "Tin 1:", KHÔNG gạch đầu dòng — đoạn văn tự nhiên,
-      chỉ là xuống dòng phân tách rõ ràng giữa các tin để dễ quan sát. NGOẠI LỆ DUY NHẤT: câu
+      cùng 1 đoạn. Các đoạn cách nhau bằng đúng MỘT DÒNG TRỐNG (tức xuống dòng 2 lần); KHÔNG
+      xuống dòng đơn giữa các đoạn và KHÔNG xuống dòng ở giữa một đoạn. KHÔNG đặt tiêu đề kiểu
+      "Tin 1:", KHÔNG gạch đầu dòng — đoạn văn tự nhiên. NGOẠI LỆ DUY NHẤT: câu
       dẫn chuyển nhóm chủ đề (xem mục BỐ CỤC) viết dính liền đầu đoạn tin đầu tiên của nhóm
       mới, không xuống dòng riêng, không tính là một đoạn/tin.
 
@@ -535,7 +580,7 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
       luôn đúng 2 câu, luôn theo mẫu "câu 1 nêu sự kiện — câu 2 nêu hệ quả/lo ngại"). Mỗi đoạn
       cần có độ dài và cách triển khai câu khác nhau, phản ánh đúng lượng và tính chất thông
       tin của tin đó — có tin chỉ cần 1 câu, có tin cần 4-5 câu nếu nội dung phong phú.
-      
+
     - Trong CÙNG một nhóm chủ đề, các đoạn tin không bắt buộc phải liền mạch với nhau như
       một bài luận — ưu tiên tóm tắt đầy đủ, rõ ràng từng tin hơn là ưu tiên chuyển ý mượt
       giữa các tin trong cùng nhóm. Câu dẫn chuyển ý CHỈ bắt buộc khi chuyển sang nhóm chủ đề
@@ -550,18 +595,19 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
       thành ít đoạn hơn ở bất kỳ nhóm chủ đề chính nào, kể cả nhóm ưu tiên thấp nhất); nhóm
       tin liên quan gián tiếp (nếu có) luôn đặt ở cuối bài, sau tất cả nhóm chủ đề chính.
 
-    - Đối với các tin thuộc chủ đề quan tâm:
-        - Tin ảnh hưởng tới chính sách, pháp luật, kinh tế vĩ mô, ngân sách,
-        quản lý nhà nước hoặc công việc hiện tại:
-            -> tóm tắt đầy đủ.
-        - Tin doanh nghiệp hoặc thị trường chỉ có ý nghĩa tham khảo:
-            -> ngắn hơn.
-        - Tin mang tính đời sống, giải trí hoặc cá nhân:
-            -> chỉ giữ nếu có giá trị đặc biệt; nếu không thì bỏ.
+    - Đối với các tin thuộc NHÓM CHỦ ĐỀ CHÍNH (đã được lọc sẵn là có liên quan): KHÔNG được bỏ
+      tin nào, KHÔNG được gộp tin nào — mỗi tin đúng 1 đoạn riêng. Chỉ điều chỉnh ĐỘ DÀI/ĐỘ SÂU
+      theo tính chất tin:
+        - Tin ảnh hưởng tới chính sách, pháp luật, kinh tế vĩ mô, ngân sách, quản lý nhà nước
+        hoặc công việc hiện tại:
+            -> tóm tắt đầy đủ, chi tiết.
+        - Tin doanh nghiệp, thị trường, đời sống, giải trí hoặc cá nhân, chỉ có ý nghĩa tham khảo:
+            -> viết ngắn hơn nhưng vẫn nêu đủ ý cốt lõi và vẫn có đoạn riêng.
 
-    - ƯU TIÊN giữ lại các tin có giá trị thông tin cao. Nếu nhiều tin nói cùng một chủ đề, cùng một sự kiện hoặc có mức độ quan trọng thấp, được phép lược bỏ bớt hoặc gộp chúng thành một đoạn ngắn. Mục tiêu là tạo ra một bản tin dễ đọc, không phải liệt kê đầy đủ mọi tin. Các tin trong chu_de PHẢI tóm tắt đầy đủ ý chính (xem yêu cầu độ chi tiết riêng từng nhóm ở trên); các tin gián tiếp tóm sơ ý chính nhất nhưng vẫn phải có nội dung, không được chỉ nêu tên tin suông.
-
-    - Cố gắng bao quát các tin trong danh sách.  Nếu nhiều tin trùng chủ đề hoặc mức độ quan trọng thấp, được phép gộp hoặc lược bỏ các chi tiết phụ.
+    - Quyền lược bỏ hoặc gộp CHỈ áp dụng cho NHÓM TIN LIÊN QUAN GIÁN TIẾP (xem yêu cầu của nhóm
+      đó ở trên). Tin nhóm chủ đề chính PHẢI tóm tắt đầy đủ ý chính (xem yêu cầu độ chi tiết
+      riêng từng nhóm ở trên); tin gián tiếp tóm sơ ý chính nhất nhưng vẫn phải có nội dung,
+      không được chỉ nêu tên tin suông.
 
     - Không tự suy luận, đánh giá hoặc rút ra bài học nếu bài báo không nêu. Không thêm các nhận định như:
         - cho thấy
@@ -577,22 +623,34 @@ def build_rss_prompt(persona: dict, ranked_articles: list, tin_gian_tiep: list =
 
     return prompt
 
+
+NGUONG_TRUNG_BIGRAM_BO_SOT = 0.3  # duoi muc nay coi la nghi ngo bo sot (heuristic, CAN HIEU CHINH)
+
+
+def _bigram_am_tiet(text: str) -> set:
+    tokens = re.findall(r"\w+", (text or "").lower())
+    return {(tokens[i], tokens[i + 1]) for i in range(len(tokens) - 1)}
+
+
 def kiem_tra_bai_bi_bo_sot(ranked_articles: list, summary: str) -> list:
     """
-    Kiem tra tung bai trong nhom chinh (ranked_articles) co it nhat 1 cum tu
-    dac trung tu title xuat hien trong summary khong. Heuristic don gian:
-    lay 4 tu dau cua title (thuong du dac trung de nhan dien), so khop
-    khong phan biet hoa/thuong. Tra ve danh sach title cua cac bai NGHI NGO
-    bi bo sot (khong tim thay dau vet trong summary).
+    Heuristic: summary paraphrase nen KHONG the doi title khop nguyen 4 tu dau.
+    Thay vao do so ti le cap am tiet lien tiep (bigram) cua title xuat hien trong
+    summary; duoi NGUONG_TRUNG_BIGRAM_BO_SOT thi nghi ngo bai bi bo sot.
+    Tra ve danh sach title nghi ngo.
     """
-    summary_lower = summary.lower()
+    bigram_summary = _bigram_am_tiet(summary)
     bai_nghi_ngo_thieu = []
     for a in ranked_articles:
         title = a.get("title", "")
-        tu_dac_trung = " ".join(title.split()[:4]).lower()
-        if tu_dac_trung and tu_dac_trung not in summary_lower:
+        bigram_title = _bigram_am_tiet(title)
+        if not bigram_title:
+            continue
+        ti_le = len(bigram_title & bigram_summary) / len(bigram_title)
+        if ti_le < NGUONG_TRUNG_BIGRAM_BO_SOT:
             bai_nghi_ngo_thieu.append(title)
     return bai_nghi_ngo_thieu
+
 
 def tom_tat_rss_cho_persona(persona: dict, articles: list, client,
                             model_name: str = SUMMARY_MODEL_NAME) -> dict:
@@ -647,7 +705,9 @@ def tom_tat_rss_cho_persona(persona: dict, articles: list, client,
     except (AttributeError, IndexError):
         pass
 
-    summary = response.text.strip()
+    # chuan hoa: moi lan xuong dong (don hay nhieu) -> dung 1 dong trong, de dem doan
+    # va de judge tach doan khong bi lech neu model chi xuong dong don.
+    summary = re.sub(r"\s*\n\s*", "\n\n", response.text.strip())
     so_doan_thuc_te = len([doan for doan in summary.split("\n\n") if doan.strip()])
     so_tin_chinh = len(ranked)
     ti_le_bao_phu = so_doan_thuc_te / so_tin_chinh if so_tin_chinh else 0.0
@@ -664,7 +724,7 @@ def tom_tat_rss_cho_persona(persona: dict, articles: list, client,
             f"{max_tokens} token (ước lượng từ {so_bai} tin) — cần chạy lại persona này "
             f"riêng với TOKENS_UOC_LUONG_MOI_BAI hoặc MAX_OUTPUT_TOKENS_TRAN cao hơn."
         )
-    if ti_le_bao_phu < TI_LE_BAO_PHU_TOI_THIEU:
+    if so_tin_chinh > 0 and ti_le_bao_phu < TI_LE_BAO_PHU_TOI_THIEU:
         notes.append(
             f"CẢNH BÁO: bài viết chỉ có {so_doan_thuc_te} đoạn, trong khi nhóm tin chính "
             f"(bắt buộc mỗi tin 1 đoạn riêng) có {so_tin_chinh} tin — có khả năng model đã "
