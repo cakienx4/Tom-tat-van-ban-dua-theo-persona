@@ -17,7 +17,7 @@ DATA_DIR = MD_ROOT / "data"
 OUTPUT_DIR = MD_ROOT / "output" / "rss_summary"
 
 from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph
-from pipeline.rss.ontology_context_state import lay_ontology_context_cho_nganh
+from pipeline.profiles.ontology_context_state import lay_ontology_context_cho_nganh
 
 _ONTOLOGY_PATH = MD_ROOT / "persona_states.ttl"
 _STATE_GRAPH = load_graph(str(_ONTOLOGY_PATH))

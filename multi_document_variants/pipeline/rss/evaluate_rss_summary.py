@@ -10,7 +10,6 @@ vi .json co san ranked_articles/tin_gian_tiep de tra nguoc ve van ban nguon).
 """
 
 import os
-import re
 import json
 import time
 from collections import Counter
