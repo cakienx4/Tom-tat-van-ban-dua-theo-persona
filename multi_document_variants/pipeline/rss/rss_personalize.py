@@ -14,7 +14,7 @@ MD_ROOT = ROOT_DIR / "multi_document_variants"
 SHARED_ROOT = ROOT_DIR / "shared"
 
 DATA_DIR = MD_ROOT / "data"
-OUTPUT_DIR = MD_ROOT / "output" / "rss_summary"
+OUTPUT_DIR = MD_ROOT / "output" / "bao_chi" / "rss_summary"
 
 from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph
 from pipeline.profiles.ontology_context_state import lay_ontology_context_cho_nganh

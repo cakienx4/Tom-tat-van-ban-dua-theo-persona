@@ -25,7 +25,7 @@ MD_ROOT = ROOT_DIR / "multi_document_variants"
 SHARED_ROOT = ROOT_DIR / "shared"
 
 DATA_DIR = MD_ROOT / "data"
-OUTPUT_DIR = MD_ROOT / "output" / "rss_summary"
+OUTPUT_DIR = MD_ROOT / "output" / "bao_chi" / "rss_summary"
 JSON_DIR = OUTPUT_DIR / "json"
 EVAL_DIR = OUTPUT_DIR / "eval"
 

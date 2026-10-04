@@ -22,8 +22,8 @@ API_KEY = os.getenv("API_KEY")
 client = genai.Client(api_key=API_KEY)
 
 MODEL_NAME_KHOP_NGANH = "gemini-3.1-flash-lite"
-ROOT_DIR = Path(__file__).resolve().parents[3]
-PROFILE_PATH = ROOT_DIR / "data" / "state_profiles.json"
+ROOT_DIR = Path(__file__).resolve().parents[2]
+PROFILE_PATH = ROOT_DIR / "data" / "profile" / "state_profiles.json"
 
 
 def lay_danh_sach_nganh(duong_dan_profile=PROFILE_PATH):
