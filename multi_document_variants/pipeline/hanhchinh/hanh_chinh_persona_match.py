@@ -1,11 +1,3 @@
-"""
-File: pipeline/rss/hanhchinh/hanh_chinh_persona_match.py
-
-Mục đích: so khớp "đối tượng thi hành" trích từ hanh_chinh_extract.py
-với nganh_to/nganh_nho trong state_profiles.json bằng LLM, sau đó lọc
-ra danh sách persona_id liên quan.
-"""
-
 import json
 import os
 import sys
@@ -25,10 +17,7 @@ MODEL_NAME_KHOP_NGANH = "gemini-3.1-flash-lite"
 ROOT_DIR = Path(__file__).resolve().parents[2]
 PROFILE_PATH = ROOT_DIR / "data" / "profile" / "state_profiles.json"
 
-
 def lay_danh_sach_nganh(duong_dan_profile=PROFILE_PATH):
-    """Đọc state_profiles.json, trả về danh sách nganh_to duy nhất
-    và dict {nganh_to: [danh sách nganh_nho duy nhất]}"""
     with open(duong_dan_profile, "r", encoding="utf-8") as f:
         du_lieu = json.load(f)
 
@@ -43,6 +32,7 @@ def lay_danh_sach_nganh(duong_dan_profile=PROFILE_PATH):
         nganh_to_set.add(nganh_to)
         nganh_to_sang_nganh_nho.setdefault(nganh_to, set()).add(nganh_nho)
 
+    # Chuyển set sang list để dễ đưa vào prompt
     nganh_to_sang_nganh_nho = {
         k: sorted(v) for k, v in nganh_to_sang_nganh_nho.items()
     }
@@ -50,11 +40,6 @@ def lay_danh_sach_nganh(duong_dan_profile=PROFILE_PATH):
 
 
 def tao_prompt_khop_nganh_gop(danh_sach_doi_tuong, danh_sach_nganh_to, nganh_to_sang_nganh_nho, trich_yeu=None):
-    """Tạo prompt khớp NHIỀU đối tượng thi hành cùng lúc (1 lần gọi LLM 
-    cho cả văn bản), mỗi đối tượng đánh số thứ tự để LLM trả kết quả 
-    tương ứng. Nếu có trich_yeu (chủ đề công văn), đưa vào làm ngữ cảnh 
-    chung để khớp ngành chính xác hơn khi đối tượng thi hành chỉ nêu 
-    chung chung."""
     danh_sach_nganh_text = ""
     for nganh_to in danh_sach_nganh_to:
         danh_sach_nho = nganh_to_sang_nganh_nho.get(nganh_to, [])
@@ -85,37 +70,77 @@ Danh sách ngành (nganh_to) và các ngành nhỏ (nganh_nho) tương ứng:
 {danh_sach_nganh_text}
 
 Nhiệm vụ: Với TỪNG câu theo đúng số thứ tự, xác định câu đó khớp với 
-(những) nganh_to và nganh_nho nào trong danh sách trên. Nếu câu chỉ nhắc 
-chung chung (vd "các Sở, ban, ngành", "Thủ trưởng các đơn vị") và KHÔNG 
-có ngữ cảnh chung ở trên để thu hẹp, thì liệt kê TẤT CẢ nganh_to phù hợp. 
-Nếu CÓ ngữ cảnh chung (trích yếu), ưu tiên dùng nó để chỉ chọn ngành 
-thực sự liên quan đến chủ đề, không liệt kê tất cả. Mỗi câu xử lý độc 
-lập, không suy luận chéo giữa các câu (trừ việc dùng ngữ cảnh chung ở trên).
+(những) nganh_to và nganh_nho nào trong danh sách trên. 
+
+QUY TẮC BẮT BUỘC (đọc kỹ để phân biệt 2 tình huống khác nhau):
+
+1. CÂU CHUNG CHUNG - không nêu tên cơ quan/chức danh cụ thể nào (vd 
+   "các Sở, ban, ngành Thành phố", "các cơ quan, đơn vị", "Thủ trưởng 
+   các đơn vị", "UBND các xã, phường"):
+   - Nếu KHÔNG có ngữ cảnh chung (trích yếu) ở trên: BẮT BUỘC liệt kê 
+     TẤT CẢ nganh_to có trong danh sách, do_tin_cay = "trung bình".
+     TUYỆT ĐỐI KHÔNG được để nganh_to_khop rỗng trong trường hợp này - 
+     câu chung chung nghĩa là áp dụng rộng, không phải không áp dụng.
+   - Nếu CÓ ngữ cảnh chung (trích yếu): dùng nó để thu hẹp, chỉ chọn 
+     ngành thực sự liên quan đến chủ đề.
+
+2. CÂU NÊU TÊN CƠ QUAN/CHỨC DANH CỤ THỂ (vd "Sở Xây dựng", "Sở Quy 
+   hoạch - Kiến trúc", "Giám đốc Sở Tài chính"):
+   - Nếu có ngành trong danh sách khớp đúng bản chất: chọn ngành đó.
+   - Nếu KHÔNG có ngành nào trong danh sách thực sự khớp đúng bản chất 
+     (ví dụ "Sở Xây dựng" khi danh sách không có ngành xây dựng): 
+     TUYỆT ĐỐI KHÔNG chọn đại ngành gần giống. Trả về nganh_to_khop 
+     và nganh_nho_khop là mảng rỗng [], do_tin_cay là 
+     "khong_co_nganh_phu_hop". Đây là trường hợp DUY NHẤT được phép để 
+     trống - chỉ áp dụng khi câu nêu tên CƠ QUAN CỤ THỂ, KHÔNG áp dụng 
+     cho câu chung chung ở mục 1.
+
+3. Nếu câu chỉ nêu tên cơ quan với vai trò là ĐẦU MỐI NHẬN/TỔNG HỢP 
+   BÁO CÁO (ví dụ "gửi báo cáo về Sở X để tổng hợp", "qua Sở X", "báo 
+   cáo UBND Thành phố (qua Sở X)"), KHÔNG được coi đó là ngành của đối 
+   tượng thi hành. Chỉ khớp ngành dựa trên đối tượng thi hành thực sự 
+   (chủ thể phải thực hiện nhiệm vụ), bỏ qua ngành của cơ quan đầu mối 
+   nhận báo cáo. Nếu sau khi bỏ cơ quan đầu mối, câu chỉ còn phần chung 
+   chung, áp dụng quy tắc 1 (liệt kê hết).
+
+   VÍ DỤ CỤ THỂ: câu "UBND Thành phố yêu cầu các sở, ngành, địa phương, 
+   đơn vị nghiêm túc triển khai... nếu có khó khăn, vướng mắc, cơ quan, 
+   đơn vị báo cáo UBND Thành phố (qua Sở Giáo dục và Đào tạo)" - chủ 
+   thể phải thực hiện nhiệm vụ là "các sở, ngành, địa phương, đơn vị" 
+   (chung chung), còn "Sở Giáo dục và Đào tạo" chỉ là nơi tổng hợp báo 
+   cáo hộ UBND Thành phố, KHÔNG phải đối tượng thi hành chính của câu 
+   này. Trường hợp này PHẢI áp dụng quy tắc 1 - liệt kê TẤT CẢ nganh_to, 
+   TUYỆT ĐỐI KHÔNG chỉ chọn riêng "Giáo dục - Đào tạo".
+
+4. Mỗi câu xử lý độc lập, không suy luận chéo giữa các câu.
 
 Chỉ trả về JSON, không giải thích, không markdown, đúng định dạng sau 
-(mảng có đúng số phần tử bằng số câu, đúng thứ tự):
+(mảng có đúng số phần tử bằng số câu, đúng thứ tự). Ví dụ minh họa 3 
+tình huống:
 [
   {{
     "stt": 0,
-    "nganh_to_khop": ["ten nganh to 1"],
-    "nganh_nho_khop": ["ten nganh nho 1"],
+    "nganh_to_khop": ["ten nganh to cu the"],
+    "nganh_nho_khop": ["ten nganh nho cu the"],
     "do_tin_cay": "cao"
   }},
   {{
     "stt": 1,
+    "nganh_to_khop": ["nganh 1", "nganh 2", "... liệt kê hết tất cả nganh_to"],
+    "nganh_nho_khop": [],
+    "do_tin_cay": "trung binh"
+  }},
+  {{
+    "stt": 2,
     "nganh_to_khop": [],
     "nganh_nho_khop": [],
-    "do_tin_cay": "thap"
+    "do_tin_cay": "khong_co_nganh_phu_hop"
   }}
 ]"""
     return prompt
 
 
 def goi_llm_khop_nganh_gop(client, danh_sach_doi_tuong, danh_sach_nganh_to, nganh_to_sang_nganh_nho, trich_yeu=None):
-    """Gọi Gemini 1 lần để khớp TẤT CẢ đối tượng thi hành của 1 văn bản.
-    Trả về list kết quả theo đúng thứ tự đầu vào. Nếu có trich_yeu (chủ 
-    đề công văn), truyền vào để làm ngữ cảnh chung giúp khớp ngành chính 
-    xác hơn khi đối tượng thi hành chỉ nêu chung chung."""
     if not danh_sach_doi_tuong:
         return []
 
@@ -152,45 +177,23 @@ def goi_llm_khop_nganh_gop(client, danh_sach_doi_tuong, danh_sach_nganh_to, ngan
 
     return ket_qua_list
 
-
-def loc_persona_theo_ket_qua_khop(ket_qua_khop, duong_dan_profile=PROFILE_PATH):
-    """Lọc danh sách persona_id từ state_profiles.json khớp với 
-    nganh_to_khop / nganh_nho_khop"""
-    with open(duong_dan_profile, "r", encoding="utf-8") as f:
-        du_lieu = json.load(f)
-
-    nganh_to_khop = set(ket_qua_khop.get("nganh_to_khop", []))
-    nganh_nho_khop = set(ket_qua_khop.get("nganh_nho_khop", []))
-
-    danh_sach_id_khop = []
-    for persona in du_lieu:
-        if persona.get("nganh_to") in nganh_to_khop or persona.get("nganh_nho") in nganh_nho_khop:
-            danh_sach_id_khop.append(persona.get("id"))
-
-    return danh_sach_id_khop
-
-
 def chay_khop_persona_cho_van_ban(client, ket_qua_extract, duong_dan_profile=PROFILE_PATH):
-    """Hàm điều phối chính: nhận output của hanh_chinh_extract.py
-    (ket_qua_extract có field doi_tuong_thi_hanh), gọi LLM khớp gộp,
-    rồi lọc persona_id tương ứng cho từng đối tượng thi hành.
-
-    Trích yếu (nguon="trich_yeu") được tách riêng làm ngữ cảnh chung,
-    không đưa vào danh sách khớp - vì bản thân nó không phải đối tượng
-    thi hành, chỉ giúp thu hẹp phạm vi khi câu Kính gửi nêu chung chung.
-
-    Trả về list, mỗi phần tử gồm: nguon, text (đối tượng thi hành gốc),
-    nganh_to_khop, nganh_nho_khop, do_tin_cay, danh_sach_persona_id_khop"""
     danh_sach_doi_tuong_goc = ket_qua_extract.get("doi_tuong_thi_hanh", [])
 
-    # tách trích yếu (nếu có) ra làm ngữ cảnh, không đưa vào khớp
     trich_yeu = None
     danh_sach_doi_tuong = []
-    for dt in danh_sach_doi_tuong_goc:
+    chi_so_goc_theo_vi_tri_loc = []
+    for chi_so_goc, dt in enumerate(danh_sach_doi_tuong_goc):
         if dt.get("nguon") == "trich_yeu":
             trich_yeu = dt.get("text")
         else:
             danh_sach_doi_tuong.append(dt)
+            chi_so_goc_theo_vi_tri_loc.append(chi_so_goc)
+
+    if trich_yeu is None:
+        print("CẢNH BÁO: không trích được trích yếu/tên văn bản làm ngữ cảnh "
+              "chung - các câu đối tượng thi hành chung chung sẽ bị liệt kê "
+              "TẤT CẢ nganh_to, độ chính xác khớp ngành sẽ thấp cho văn bản này.")
 
     danh_sach_nganh_to, nganh_to_sang_nganh_nho = lay_danh_sach_nganh(duong_dan_profile)
 
@@ -206,19 +209,42 @@ def chay_khop_persona_cho_van_ban(client, ket_qua_extract, duong_dan_profile=PRO
         else:
             ket_qua_khop = {"nganh_to_khop": [], "nganh_nho_khop": [], "do_tin_cay": "thap"}
 
-        danh_sach_id_khop = loc_persona_theo_ket_qua_khop(ket_qua_khop, duong_dan_profile)
+        danh_sach_id_khop, danh_sach_id_khop_ca_nganh_nho = loc_persona_theo_ket_qua_khop(
+            ket_qua_khop, duong_dan_profile
+        )
 
         ket_qua_cuoi_cung.append({
             "nguon": doi_tuong.get("nguon"),
             "text": doi_tuong.get("text"),
+            "chi_so_doi_tuong_goc": chi_so_goc_theo_vi_tri_loc[i],
             "nganh_to_khop": ket_qua_khop.get("nganh_to_khop", []),
             "nganh_nho_khop": ket_qua_khop.get("nganh_nho_khop", []),
             "do_tin_cay": ket_qua_khop.get("do_tin_cay", "thap"),
             "danh_sach_persona_id_khop": danh_sach_id_khop,
+            "danh_sach_persona_id_khop_ca_nganh_nho": danh_sach_id_khop_ca_nganh_nho,
         })
 
     return ket_qua_cuoi_cung
 
+
+def loc_persona_theo_ket_qua_khop(ket_qua_khop, duong_dan_profile=PROFILE_PATH):
+    with open(duong_dan_profile, "r", encoding="utf-8") as f:
+        du_lieu = json.load(f)
+
+    nganh_to_khop = set(ket_qua_khop.get("nganh_to_khop", []))
+    nganh_nho_khop = set(ket_qua_khop.get("nganh_nho_khop", []))
+
+    danh_sach_id_khop = []
+    danh_sach_id_khop_ca_nganh_nho = []
+    for persona in du_lieu:
+        if persona.get("nganh_to") in nganh_to_khop:
+            danh_sach_id_khop.append(persona.get("id"))
+            # đánh dấu riêng những persona khớp CẢ nganh_nho cụ thể,
+            # dùng để tăng độ tin cậy, không dùng để loại bớt id ở trên
+            if nganh_nho_khop and persona.get("nganh_nho") in nganh_nho_khop:
+                danh_sach_id_khop_ca_nganh_nho.append(persona.get("id"))
+
+    return danh_sach_id_khop, danh_sach_id_khop_ca_nganh_nho
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

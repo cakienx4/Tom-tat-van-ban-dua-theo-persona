@@ -4,7 +4,7 @@ import json
 import docx
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 # ==== CÁC HẰNG SỐ CẤU HÌNH ====
 
 # từ khóa để nhận diện đoạn có khả năng liên quan tới đối tượng thi hành
@@ -303,13 +303,6 @@ def trich_doi_tuong_thong_bao(doc):
     return ket_qua
 
 def trich_doi_tuong_cong_van(doc):
-    """
-    Công văn: đối tượng thi hành nằm ngay sau dòng "Kính gửi:", là các
-    đoạn Normal ngắn liên tiếp nhau, thường mỗi đoạn 1 đối tượng.
-    Ngoài ra trích thêm trích yếu "V/v..." làm ngữ cảnh chung, vì dòng
-    "Kính gửi" thường chỉ nêu chung chung ("các Sở, Ban, ngành") không
-    đủ để khớp ngành chính xác nếu thiếu chủ đề công văn.
-    """
     ket_qua = []
     danh_sach_doan = doc.paragraphs
 
@@ -380,10 +373,25 @@ def trich_doi_tuong_ke_hoach(doc):
     ket_qua = []
     danh_sach_heading = lay_danh_sach_heading(doc)
 
+    da_lay_trich_yeu = False
     for h in danh_sach_heading[:10]:
         if h["text"].strip().upper().startswith("KẾ HOẠCH"):
             ket_qua.append({"nguon": "trich_yeu", "text": h["text"]})
+            da_lay_trich_yeu = True
             break
+
+    # fallback: một số văn bản (VD: KH-292) để tên loại văn bản "KẾ HOẠCH"
+    # đứng riêng 1 dòng, không in đậm nên không lọt vào danh_sach_heading.
+    # Trong trường hợp đó, heading_chuan đầu tiên sau bảng quốc hiệu
+    # (vi_tri != 0) chính là tên kế hoạch thật, lấy làm trich_yeu.
+    if not da_lay_trich_yeu:
+        for h in danh_sach_heading[:10]:
+            if h["vi_tri"] == 0:
+                continue
+            if h["loai_heading"] == "heading_chuan":
+                ket_qua.append({"nguon": "trich_yeu", "text": h["text"]})
+                da_lay_trich_yeu = True
+                break
 
     for h in danh_sach_heading:
         if h["loai_heading"] == "heading_chuan" and "Giao" in h["text"]:
@@ -406,16 +414,6 @@ def trich_doi_tuong_ke_hoach(doc):
 
 
 def trich_doi_tuong_quyet_dinh(doc):
-    """
-    Quyết định: đối tượng thi hành thường có câu "... chịu trách nhiệm thi
-    hành Quyết định này". Câu này KHÔNG LUÔN nằm ở đoạn bắt đầu bằng
-    "Điều N." - nhiều văn bản viết câu thi hành ở đoạn riêng ngay sau đoạn
-    "Điều N." (cùng thuộc Điều đó nhưng không lặp lại tiền tố), nên quét
-    toàn bộ đoạn văn thay vì chỉ đoạn bắt đầu bằng "Điều N.". Ngoài ra
-    trích thêm trích yếu (tên/chủ đề Quyết định) làm ngữ cảnh chung, vì
-    câu thi hành thường chỉ nêu chung chung ("các Sở, ban, ngành") không
-    đủ để khớp ngành chính xác nếu thiếu chủ đề của Quyết định.
-    """
     ket_qua = []
 
     # trích yếu dạng 1: dòng riêng "Về việc..." ngay sau tiêu đề "QUYẾT ĐỊNH"
@@ -442,7 +440,6 @@ def trich_doi_tuong_quyet_dinh(doc):
                     ket_qua.append({"nguon": "trich_yeu", "text": tieu_de})
                 break
 
-    # câu thi hành: quét toàn bộ đoạn văn, dừng khi gặp "Nơi nhận"
     for p in doc.paragraphs:
         text = p.text.strip()
         if not text:
@@ -456,12 +453,6 @@ def trich_doi_tuong_quyet_dinh(doc):
 
 
 def trich_doi_tuong_phu_luc(doc):
-    """
-    Phụ lục / quy định kèm theo: thường không có Kính gửi hay Nơi nhận
-    riêng, đối tượng áp dụng phải suy luận từ "Chương I QUY ĐỊNH CHUNG"
-    hoặc "Điều 1. Phạm vi điều chỉnh". Hàm này chỉ cố gắng lấy về, không
-    chắc chắn đúng 100% nên cần người kiểm tra lại.
-    """
     ket_qua = []
     for i, p in enumerate(doc.paragraphs):
         text = p.text.strip()
@@ -506,11 +497,6 @@ def trich_doi_tuong_thi_hanh(doc, loai_van_ban):
 # ==== BƯỚC 5: TRÍCH BẢNG (CÓ XỬ LÝ MERGE Ô ĐẦU BẢNG) ====
 
 def trich_bang(doc):
-    """
-    Lấy thông tin cơ bản của từng bảng: số dòng, số cột, và dòng header.
-    Có xử lý trường hợp ô đầu bảng bị merge (nhiều ô header trỏ chung 1
-    ô thật) để tránh header bị lặp hoặc trống.
-    """
     ket_qua = []
     for ti, table in enumerate(doc.tables):
         so_dong = len(table.rows)
@@ -567,20 +553,10 @@ def trich_toan_bo_noi_dung_theo_muc(doc):
 
 
 def _chuan_hoa_text_de_so_khop(text):
-    """Chuẩn hóa nhẹ để so khớp gần đúng (bỏ khoảng trắng thừa, không phân biệt hoa/thường)."""
+
     return " ".join(text.split()).lower()
 
 def tach_muc_theo_phan_cong_co_quan(danh_sach_muc):
-    """
-    Với những mục có nhiều đoạn văn liên tiếp là câu phân công nhiệm vụ
-    riêng cho từng cơ quan (vd nhiều dòng "Sở A chủ trì...", "Sở B chủ
-    trì..." nằm chung 1 mục vì không có heading ngăn cách), tách mỗi câu
-    phân công ra thành 1 mục riêng để sau này gán tầng độ sâu theo ĐÚNG
-    TỪNG cơ quan, không gán chung cho cả khối.
-
-    Giữ NGUYÊN thứ tự đoạn văn gốc. Đoạn văn KHÔNG phải câu phân công vẫn
-    được gom lại thành mục như cũ (chỉ tách riêng đoạn phân công ra).
-    """
     danh_sach_muc_moi = []
 
     for muc in danh_sach_muc:

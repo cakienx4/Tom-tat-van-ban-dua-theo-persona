@@ -1,5 +1,4 @@
 import os
-import re
 import json
 from pathlib import Path
 
@@ -10,16 +9,26 @@ TANG_CHUYEN_SAU = 0
 TANG_TRUNG_BINH = 1
 TANG_NEN = 2
 
-DO_TIN_CAY_SANG_TANG = {"cao": TANG_CHUYEN_SAU, "trung bình": TANG_TRUNG_BINH}
-
-
 def _chi_so_da_khop_persona(persona_id, ket_qua_khop_persona):
     ket_qua = {}
     for entry in ket_qua_khop_persona:
-        if persona_id in entry.get("danh_sach_persona_id_khop", []):
-            chi_so_goc = entry.get("chi_so_doi_tuong_goc")
-            if chi_so_goc is not None:
-                ket_qua[chi_so_goc] = entry.get("do_tin_cay", "thap")
+        if persona_id not in entry.get("danh_sach_persona_id_khop", []):
+            continue
+
+        chi_so_goc = entry.get("chi_so_doi_tuong_goc")
+        if chi_so_goc is None:
+            continue
+
+        do_tin_cay = entry.get("do_tin_cay", "thap")
+
+        # nếu persona này còn khớp cả nganh_nho cụ thể (không chỉ nganh_to),
+        # nâng độ tin cậy trung bình -> cao; không hạ nếu gốc đã là "cao"
+        if do_tin_cay == "trung bình" and persona_id in entry.get(
+            "danh_sach_persona_id_khop_ca_nganh_nho", []
+        ):
+            do_tin_cay = "cao"
+
+        ket_qua[chi_so_goc] = do_tin_cay
     return ket_qua
 
 
@@ -58,82 +67,126 @@ def gan_tang_do_sau_va_style(persona_id, danh_sach_muc, ket_qua_khop_persona):
 
     return danh_sach_muc_moi, style
 
-def persona_co_khop_van_ban(persona_id, ket_qua_khop_persona):
-    """
-    Kiểm tra persona này có xuất hiện trong danh_sach_persona_id_khop của
-    BẤT KỲ đối tượng thi hành nào trong văn bản hay không. Dùng để chặn
-    sớm trường hợp chạy nhầm persona không liên quan gì tới văn bản.
-    """
-    for entry in ket_qua_khop_persona:
-        if persona_id in entry.get("danh_sach_persona_id_khop", []):
-            return True
-    return False
-
 # ==== BƯỚC 2: TEXT HƯỚNG DẪN THEO TẦNG ĐỘ SÂU VÀ THEO STYLE ====
 
 MUC_DO_THEO_TANG = {
     TANG_CHUYEN_SAU: (
         "Đây là phần LIÊN QUAN TRỰC TIẾP nhất tới công việc/chuyên môn của "
-        "người đọc (khớp đúng, cụ thể). Tóm tắt ĐẦY ĐỦ, không bỏ sót ý quan "
-        "trọng nào trong nội dung gốc. BẮT BUỘC Giữ nguyên nhiệm vụ cụ thể, số liệu, "
-        "mốc thời gian, đơn vị chủ trì/phối hợp. Người đọc CÓ chuyên "
-        "môn đúng phần này: dùng thuật ngữ hành chính, pháp lý, chuyên ngành "
-        "một cách tự nhiên, KHÔNG giải thích lại các khái niệm cơ bản trong "
-        "ngành đó - coi như người đọc đã biết."
+        "người đọc (khớp đúng, cụ thể). Tóm tắt ĐẦY ĐỦ, không bỏ sót nội dung "
+        "quan trọng. Giữ nguyên nhiệm vụ cụ thể, tên cơ quan/đơn vị, số liệu "
+        "thực tế và mốc thời gian thực tế có trong nội dung gốc. Người đọc CÓ "
+        "chuyên môn đúng lĩnh vực này nên sử dụng thuật ngữ hành chính, pháp lý "
+        "hoặc chuyên ngành một cách tự nhiên, KHÔNG cần giải thích lại các khái "
+        "niệm cơ bản."
+
+        " Khi giữ số liệu, CHỈ giữ các số liệu phản ánh nội dung thực tế của văn "
+        "bản như tỷ lệ, số lượng, chỉ tiêu, mục tiêu, kinh phí, thời hạn, lộ "
+        "trình, ngày tháng thực hiện và các số liệu thống kê phục vụ nội dung."
+
+        " TUYỆT ĐỐI KHÔNG coi số hiệu, ký hiệu hoặc ngày ban hành của các văn bản "
+        "viện dẫn là số liệu cần giữ. Không đưa vào bản tóm tắt các chuỗi như "
+        "'777/TTg-TCCV', '1186/KH-BGDĐT', '4054/BGDĐT-GDPT'... Nếu cần nhắc tới "
+        "văn bản thì chỉ ghi loại văn bản (Quyết định, Kế hoạch, Công văn...) "
+        "mà không ghi số hiệu."
     ),
     TANG_TRUNG_BINH: (
-        "Đây là phần liên quan nhưng ở mức CHUNG (áp dụng rộng cho nhiều "
-        "ngành, không riêng chuyên môn của người đọc). Tóm tắt đủ ý chính, "
-        "không cần đi sâu chi tiết như phần liên quan trực tiếp. Người đọc "
-        "KHÔNG CÓ chuyên môn đúng phần này: dùng ngôn ngữ PHỔ THÔNG, dễ "
-        "hiểu; nếu buộc phải dùng thuật ngữ hành chính/pháp lý thì giải "
+        "Đây là phần liên quan ở mức CHUNG, không phải chuyên môn trực tiếp của "
+        "người đọc. Bản tóm tắt vẫn phải BAO QUÁT đầy đủ các nội dung chính của "
+        "mục, chỉ lược bỏ các chi tiết quá nhỏ hoặc mang tính kỹ thuật. Giữ các "
+        "nhiệm vụ chính, phương án thực hiện, số liệu thực tế, mốc thời gian và "
+        "đơn vị quan trọng. Người đọc KHÔNG CÓ chuyên môn đúng lĩnh vực này nên "
+        "dùng ngôn ngữ phổ thông, dễ hiểu; đối với các thuật ngữ hành chính hoặc "
+        "pháp lý thì PHẢI giải thích ngắn gọn ngay trong câu."
+    ),
+}
+
+TANG_NEN_THEO_STYLE = {
+    "chuyen_sau": (
+        "Đây là phần NỀN, không thuộc đúng chuyên môn của người đọc nhưng vẫn là "
+        "một phần của văn bản cần nắm được. Bản tóm tắt phải BAO QUÁT đầy đủ nội "
+        "dung chính của mục này, không chỉ nêu đại ý. Giữ các nhiệm vụ chính, số "
+        "liệu thực tế, mốc thời gian và tên đơn vị quan trọng; chỉ lược bỏ các "
+        "chi tiết quá nhỏ hoặc lặp lại. Dùng ngôn ngữ hành chính tự nhiên nhưng "
+        "không đi sâu phân tích như tầng chuyên sâu."
+    ),
+    "khong_chuyen_mon": (
+        "Đây là phần NỀN, không thuộc đúng chuyên môn của người đọc. Bản tóm tắt "
+        "phải bao quát đầy đủ nội dung chính của mục, giữ các nhiệm vụ chính, số "
+        "liệu thực tế, mốc thời gian và đơn vị quan trọng. Dùng ngôn ngữ phổ "
+        "thông, dễ hiểu; đối với thuật ngữ hành chính hoặc pháp lý thì PHẢI giải "
         "thích ngắn gọn ngay trong câu."
     ),
-    TANG_NEN: (
-        "Đây là phần NỀN, không liên quan trực tiếp tới công việc của người "
-        "đọc, chỉ giữ lại để có bối cảnh chung của văn bản. Tóm tắt RẤT NGẮN "
-        "GỌN, chỉ nêu khái quát trong 1 câu, không đi vào chi tiết, dùng "
-        "ngôn ngữ phổ thông đơn giản, không dùng thuật ngữ chuyên ngành. "
-        "QUY TẮC BẮT BUỘC: DÙ nội dung gốc của mục này DÀI đến đâu, có "
-        "nhiều nhiệm vụ/số liệu/mốc thời gian/tên đơn vị cụ thể đến đâu, "
-        "TUYỆT ĐỐI KHÔNG được viết dài hơn 1 câu duy nhất cho mục này - "
-        "nội dung dài của nguồn KHÔNG PHẢI lý do để viết dài hơn giới hạn."
+    "binh_thuong": (
+        "Đây là phần NỀN, không liên quan trực tiếp tới công việc của người đọc "
+        "nhưng vẫn cần được tóm tắt để người đọc hiểu bức tranh chung của văn "
+        "bản. Bản tóm tắt phải BAO QUÁT các nội dung chính của mục này, phản ánh "
+        "được mục tiêu, yêu cầu, nhiệm vụ hoặc phương án quan trọng nếu có. Chỉ "
+        "lược bỏ các chi tiết quá nhỏ, danh sách dài hoặc thông tin mang tính kỹ "
+        "thuật. Ưu tiên diễn đạt bằng ngôn ngữ phổ thông, đơn giản, dễ hiểu. "
+        "Không bắt buộc giữ mọi số liệu, nhưng phải giữ các số liệu và mốc thời "
+        "gian thực tế có ý nghĩa đối với nội dung; không giữ số hiệu, ký hiệu "
+        "hoặc ngày ban hành của các văn bản viện dẫn."
     ),
 }
 
 
-def _dem_so_cau(text):
-    """Đếm số câu trong văn bản, tách theo dấu chấm/chấm than/chấm hỏi,
-    bỏ qua các phần rỗng (dùng để hậu kiểm độ dài khi toàn bộ mục là tầng
-    nền - lúc đó cả bản tóm tắt PHẢI rất ngắn)."""
-    cac_cau = re.split(r"[.!?]+", text)
-    return len([c for c in cac_cau if c.strip()])
-
-
-SO_CAU_TOI_DA_KHI_TOAN_NEN = 3
-SO_LAN_THU_TOI_DA_KHI_TOAN_NEN = 2
+# Quy tắc GỘP MỤC NỀN chỉ áp dụng cho style "binh_thuong" (toàn bộ văn bản
+# không liên quan gì tới người đọc). Với "chuyen_sau" và "khong_chuyen_mon",
+# KHÔNG gộp nữa - mỗi mục nền vẫn có đoạn riêng, tóm tắt đầy đủ ý hơn (nhưng
+# vẫn tuân đúng yêu cầu tầng nền: không liệt kê số liệu/mốc thời gian/tên đơn
+# vị cụ thể, không dùng thuật ngữ chuyên ngành khác lĩnh vực).
+GOP_MUC_NEN_THEO_STYLE = {
+    "chuyen_sau": (
+        "- KHÔNG gộp các mục tầng nền lại với nhau. Mỗi mục (kể cả mục tầng "
+        "nền) vẫn có đoạn/câu riêng theo đúng \"Yêu cầu cho mục này\" đã ghi ở "
+        "trên - tức là VẪN GIỮ số liệu/mốc thời gian/tên đơn vị cụ thể của "
+        "mục đó, không tóm chung chung, không cắt bỏ chi tiết."
+    ),
+    "khong_chuyen_mon": (
+        "- KHÔNG gộp các mục tầng nền lại với nhau. Mỗi mục (kể cả mục tầng "
+        "nền) vẫn có đoạn/câu riêng theo đúng \"Yêu cầu cho mục này\" đã ghi ở "
+        "trên - tức là VẪN GIỮ số liệu/mốc thời gian/tên đơn vị cụ thể của "
+        "mục đó, không tóm chung chung, không cắt bỏ chi tiết."
+    ),
+    "binh_thuong": (
+        "- Không bắt buộc viết một đoạn văn tách biệt cho MỌI mục: nếu nhiều mục "
+        "liên tiếp cùng thuộc tầng \"nền\" và có nội dung gần nhau, CÓ THỂ gộp "
+        "chung thành một đoạn cho mạch văn tự nhiên, không tách rời cứng nhắc. "
+        "TUY NHIÊN việc gộp KHÔNG được đánh đổi lấy việc bỏ sót nội dung: đoạn "
+        "gộp đó vẫn PHẢI phản ánh đầy đủ các nhóm nội dung chính của TẤT CẢ các "
+        "mục được gộp (mục tiêu, yêu cầu, nhiệm vụ, phương án... nếu có), theo "
+        "đúng thứ tự so với văn bản gốc - không được gộp rồi chỉ giữ 1 câu đại "
+        "ý chung chung làm mất nội dung của các mục khác trong cụm. Không có "
+        "yêu cầu phải viết ngắn - độ dài do nội dung cần bao quát quyết định."
+    ),
+}
 
 
 # ==== BƯỚC 3: DỰNG PROMPT ====
 
-def _dinh_dang_danh_sach_muc(danh_sach_muc):
+def _dinh_dang_danh_sach_muc(danh_sach_muc, style):
     ds = ""
+    yeu_cau_tang_nen = TANG_NEN_THEO_STYLE.get(style, TANG_NEN_THEO_STYLE["binh_thuong"])
     for i, muc in enumerate(danh_sach_muc, 1):
         if muc.get("heading") is None and not muc.get("doan_van"):
             continue
         noi_dung = "\n   ".join(muc.get("doan_van", []))
         tang = muc.get("tang_do_sau", TANG_NEN)
+        yeu_cau = MUC_DO_THEO_TANG[tang] if tang != TANG_NEN else yeu_cau_tang_nen
         ds += (
             f"\n{i}. Mục: \"{muc.get('heading') or '(không có tiêu đề riêng)'}\"\n"
             f"   Nội dung: {noi_dung}\n"
-            f"   Yêu cầu cho mục này: {MUC_DO_THEO_TANG[tang]}\n"
+            f"   Yêu cầu cho mục này: {yeu_cau}\n"
         )
     return ds
 
 
-def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang):
+def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, style):
     loai_van_ban = ket_qua_extract.get("loai_van_ban", "")
-    danh_sach_muc_text = _dinh_dang_danh_sach_muc(danh_sach_muc_voi_tang)
+    danh_sach_muc_text = _dinh_dang_danh_sach_muc(danh_sach_muc_voi_tang, style)
+    quy_tac_gop_muc_nen = GOP_MUC_NEN_THEO_STYLE.get(
+        style, GOP_MUC_NEN_THEO_STYLE["binh_thuong"]
+    )
 
     prompt = f"""Bạn đang tóm tắt cá nhân hóa 1 văn bản hành chính (loại: {loai_van_ban})
     cho một cán bộ có hồ sơ công vụ sau:
@@ -165,17 +218,90 @@ def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang):
       + Quy tắc này ĐÚNG NGUYÊN VẸN với mọi văn bản, không được nới lỏng chỉ vì
         văn bản có nhiều mục hoặc mục dài - càng nhiều mục càng phải viết liền
         mạch bằng câu dẫn chuyển ý, không phải bằng cách đánh số.
-    - Các mục có yêu cầu "tóm tắt RẤT NGẮN GỌN" (phần nền) thực sự phải ngắn -
-      không viết dài hơn 1-2 câu, không cố kéo dài giả tạo.
+    - Với MỖI mục, tuân thủ ĐÚNG "Yêu cầu cho mục này" đã ghi kèm ở trên - lưu ý
+      yêu cầu này đã khác nhau tùy theo tầng VÀ tùy theo hồ sơ người đọc, không
+      áp một kiểu viết chung cho tất cả các mục.
+    - BẮT BUỘC ÁP DỤNG QUY TẮC GỘP/KHÔNG GỘP MỤC TẦNG NỀN SAU ĐÂY, TUYỆT ĐỐI
+      KHÔNG được làm khác:
+    {quy_tac_gop_muc_nen}
     - KHÔNG tự suy luận, đánh giá hoặc thêm nhận định không có trong văn bản gốc.
     - KHÔNG chèn bất kỳ câu/cụm chú thích nào về quá trình viết bài (ví dụ:
       "(mục này được tóm gọn vì...)"). Bài trả về chỉ là văn bản tóm tắt tự nhiên.
     - Chỉ trả về nội dung văn bản, không thêm lời dẫn kiểu "Dưới đây là...".
-
-    TRƯỚC KHI TRẢ VỀ, tự kiểm tra lại bài viết: nếu phát hiện bất kỳ dòng nào bắt
-    đầu bằng số thứ tự, ký hiệu đánh số, hoặc tiêu đề mục tách riêng - PHẢI viết
-    lại đoạn đó thành câu văn xuôi liền mạch trước khi trả về câu trả lời cuối
-    cùng. Chỉ trả về bản đã kiểm tra lại, không trả về bản nháp.
+    - QUY TẮC VỀ SỐ LIỆU:
+      + CHỈ giữ các số liệu phản ánh nội dung thực tế của văn bản, bao gồm:
+        * tỷ lệ, phần trăm;
+        * số lượng cơ quan, đơn vị, trường học, cán bộ, người dân...;
+        * chỉ tiêu, mục tiêu, kết quả;
+        * kinh phí, diện tích, quy mô;
+        * ngày, tháng, năm;
+        * thời hạn, lộ trình, giai đoạn thực hiện;
+        * các số liệu thống kê và thông tin định lượng phục vụ nội dung văn bản.
+      + TUYỆT ĐỐI KHÔNG giữ hoặc nhấn mạnh số hiệu văn bản hành chính, bao gồm
+        số quyết định, số công văn, số kế hoạch, số thông báo, số báo cáo, số
+        nghị quyết, số chỉ thị hoặc bất kỳ chuỗi ký hiệu dạng
+        "xxx/TTg-...", "xxx/QĐ-...", "xxx/KH-...", "xxx/CV-...",
+        "xxx/UBND-...",...
+      + Nếu câu chỉ khác nhau ở số hiệu văn bản thì bỏ số hiệu, giữ lại nội
+        dung chính của câu.
+      + Ví dụ:
+          Sai: "Kế hoạch số 1186/KH-BGDĐT quy định..."
+          Đúng: "Kế hoạch quy định..."
+          Sai: "Quyết định số 777/TTg-TCCV yêu cầu..."
+          Đúng: "Quyết định yêu cầu..."
+          Đúng: "Thực hiện tinh gọn tối thiểu 50% đầu mối."
+          Đúng: "Lộ trình sắp xếp 10 trường cao đẳng."
+          Đúng: "Hoàn thành trước ngày 31/12/2026."
+    - QUY TẮC GIẢI THÍCH THUẬT NGỮ (áp dụng cho đoạn thuộc tầng "trung bình",
+      và tầng "nền" khi style tổng thể là "khong_chuyen_mon" hoặc "binh_thuong" -
+      tức các đoạn dành cho người đọc KHÔNG có chuyên môn đúng lĩnh vực đó):
+      + BẮT BUỘC mọi thuật ngữ hành chính, pháp lý hoặc chuyên ngành xuất hiện
+        trong đoạn đó phải có phần giải thích ngắn gọn đi kèm NGAY TRONG CÙNG
+        CÂU, không được để thuật ngữ đứng một mình không giải thích.
+      + Cách giải thích: chèn cụm giải thích ngắn ngay sau thuật ngữ, có thể
+        đặt trong dấu ngoặc đơn hoặc nối bằng dấu phẩy/cụm từ giải nghĩa tự
+        nhiên - miễn là người không có chuyên môn đọc vẫn hiểu được nghĩa mà
+        không cần tra cứu thêm.
+      + LƯU Ý QUAN TRỌNG: "không có chuyên môn" ở đây là góc nhìn của NGƯỜI
+        ĐỌC PHỔ THÔNG, không phải góc nhìn của người soạn văn bản hành chính.
+        Rất nhiều từ NGHE có vẻ thông dụng trong văn bản nhà nước (ví dụ:
+        "quy hoạch tổng thể", "xã hội hóa", "tinh giản biên chế", "dự án đầu
+        tư công", "tài sản công", "đề án", "sáp nhập", "phân cấp", "thẩm
+        định") VẪN PHẢI giải thích ở tầng này - KHÔNG được coi là "ai cũng
+        biết rồi nên không cần giải thích". Chỉ được bỏ qua giải thích với
+        các từ thuộc vốn từ phổ thông hàng ngày (ví dụ: "báo cáo", "kế
+        hoạch", "yêu cầu", "thực hiện").
+      + Trước khi viết xong đoạn thuộc tầng này, hãy tự hỏi: "nếu một người
+        chưa từng làm việc trong cơ quan nhà nước đọc câu này, họ có hiểu hết
+        từng cụm từ không?" - nếu có bất kỳ cụm nào còn nghi ngờ, PHẢI thêm
+        giải thích.
+      + Ví dụ:
+          Sai: "Sở chủ trì xây dựng đề án sáp nhập các đơn vị sự nghiệp."
+          Đúng: "Sở đứng ra tổ chức chính (chủ trì) xây dựng kế hoạch chi tiết
+          (đề án) để gộp (sáp nhập) các đơn vị sự nghiệp lại với nhau."
+          Sai: "UBND giao Sở Nội vụ thẩm định hồ sơ theo quy trình rút gọn."
+          Đúng: "UBND giao Sở Nội vụ kiểm tra, xét duyệt (thẩm định) hồ sơ theo
+          quy trình đơn giản, nhanh hơn bình thường (quy trình rút gọn)."
+      + Quy tắc này KHÔNG áp dụng cho đoạn thuộc tầng "chuyên sâu", hoặc đoạn
+        tầng "nền" khi style tổng thể là "chuyen_sau" - ở các đoạn đó thuật
+        ngữ chuyên ngành được dùng tự nhiên, không cần giải thích lại.
+    - TÍNH BAO QUÁT:
+      + Bản tóm tắt phải phản ánh đầy đủ các nhóm nội dung chính của văn bản.
+      + Nếu văn bản gồm nhiều mục thì cần bao quát tất cả các mục quan trọng theo đúng thứ tự.
+      + Không được chỉ tóm tắt phần mở đầu hoặc mục đích ban hành rồi kết thúc.
+      + Ưu tiên sự đầy đủ và bao quát hơn là rút ngắn tối đa.
+    TRƯỚC KHI TRẢ VỀ, tự kiểm tra lại bài viết theo 2 việc sau, rồi mới trả lời:
+    1. Nếu phát hiện bất kỳ dòng nào bắt đầu bằng số thứ tự, ký hiệu đánh số,
+       hoặc tiêu đề mục tách riêng - PHẢI viết lại đoạn đó thành câu văn xuôi
+       liền mạch.
+    2. Rà lại TỪNG đoạn ứng với tầng "trung bình" hoặc tầng "nền" (ở style
+       "khong_chuyen_mon"/"binh_thuong") - LIỆT KÊ RA TRONG ĐẦU tất cả các
+       cụm từ mang tính hành chính/pháp lý/chuyên ngành xuất hiện trong đoạn
+       đó (kể cả các cụm nghe quen thuộc như "quy hoạch tổng thể", "xã hội
+       hóa", "tinh giản biên chế"...), sau đó kiểm tra từng cụm đã có giải
+       thích đi kèm trong câu chưa. Cụm nào còn thiếu, PHẢI bổ sung giải
+       thích ngắn gọn trước khi trả về.
+    Chỉ trả về bản đã kiểm tra lại theo cả 2 việc trên, không trả về bản nháp.
     """.strip()
 
     return prompt
@@ -193,9 +319,8 @@ def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_person
 
     so_muc_chuyen_sau = sum(1 for m in danh_sach_muc_voi_tang if m["tang_do_sau"] == TANG_CHUYEN_SAU)
     so_muc_trung_binh = sum(1 for m in danh_sach_muc_voi_tang if m["tang_do_sau"] == TANG_TRUNG_BINH)
-    toan_bo_la_nen = (so_muc_chuyen_sau == 0 and so_muc_trung_binh == 0)
 
-    prompt = build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang)
+    prompt = build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, style)
 
     def _call(prompt_hien_tai):
         def _goi():
@@ -208,24 +333,6 @@ def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_person
 
     response = _call(prompt)
     summary = response.text.strip()
-
-    if toan_bo_la_nen:
-        so_lan_thu = 1
-        prompt_hien_tai = prompt
-        while _dem_so_cau(summary) > SO_CAU_TOI_DA_KHI_TOAN_NEN and so_lan_thu < SO_LAN_THU_TOI_DA_KHI_TOAN_NEN:
-            print(f"CẢNH BÁO: persona {persona.get('id')} - toàn bộ mục là tầng nền "
-                  f"nhưng bản tóm tắt có {_dem_so_cau(summary)} câu (giới hạn "
-                  f"{SO_CAU_TOI_DA_KHI_TOAN_NEN}) - thử lại lần {so_lan_thu + 1}...")
-            prompt_hien_tai = prompt + (
-                f"\n\nLƯU Ý QUAN TRỌNG: bản trả lời trước của bạn quá dài "
-                f"({_dem_so_cau(summary)} câu). Toàn bộ nội dung văn bản này đều "
-                f"thuộc tầng 'nền' đối với người đọc - PHẢI nén xuống TỐI ĐA "
-                f"{SO_CAU_TOI_DA_KHI_TOAN_NEN} câu, chỉ nêu khái quát văn bản nói "
-                f"về việc gì, không liệt kê nhiệm vụ/đơn vị/mốc thời gian cụ thể."
-            )
-            response = _call(prompt_hien_tai)
-            summary = response.text.strip()
-            so_lan_thu += 1
 
     danh_sach_muc_luu = [
         {
@@ -306,17 +413,8 @@ if __name__ == "__main__":
         with open(match_cache_path, "w", encoding="utf-8") as f:
             json.dump(ket_qua_khop_persona, f, ensure_ascii=False, indent=2)
 
-    # bước 3: chặn sớm nếu persona không thực sự khớp văn bản này
-    if not persona_co_khop_van_ban(args.id, ket_qua_khop_persona):
-        print(f"\nCẢNH BÁO: persona {args.id} KHÔNG nằm trong danh_sach_persona_id_khop")
-        print(f"của bất kỳ mục nào trong văn bản này (xem chi tiết tại {match_cache_path}).")
-        print("Nếu vẫn chạy, toàn bộ văn bản sẽ bị coi là 'phần nền', bản tóm tắt sẽ")
-        print("rất ngắn gọn cho mọi mục - khả năng cao đây không phải ý bạn muốn.")
-        xac_nhan = input("Vẫn tiếp tục chạy? (y/n): ").strip().lower()
-        if xac_nhan != "y":
-            raise SystemExit("Đã hủy.")
 
-    # bước 4: load persona theo id
+    # bước 3: load persona theo id
     with open(PROFILE_PATH, encoding="utf-8") as f:
         personas = json.load(f)
     if args.id:

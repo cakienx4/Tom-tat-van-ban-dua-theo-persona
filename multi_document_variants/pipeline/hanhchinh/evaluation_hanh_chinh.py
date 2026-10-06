@@ -1,7 +1,6 @@
 import json
 import os
 import re
-import sys
 import time
 from pathlib import Path
 
@@ -68,6 +67,7 @@ def hau_kiem_dinh_dang(summary):
         )
     return ly_do
 
+
 def _trich_cac_doan_trich_dan(text):
     ket_qua = []
     ket_qua.extend(re.findall(r'"([^"]{5,})"', text))
@@ -106,6 +106,7 @@ def hau_kiem_fail_reasons(cham, summary):
                 )
 
     return canh_bao
+
 
 # ==== BƯỚC 4: DỰNG PROMPT ĐÁNH GIÁ ====
 
@@ -163,16 +164,52 @@ BẢN TÓM TẮT CẦN CHẤM:
 
 4. bo_cuc_uu_tien: Gồm 2 phần, PHẢI đánh giá riêng từng phần:
    (a) Thứ tự: các mục trong bản tóm tắt PHẢI đúng thứ tự [MỤC 1], [MỤC 2],
-   ... như liệt kê ở trên - không được đảo thứ tự.
+   ... như liệt kê ở trên - không được đảo thứ tự. LƯU Ý VỀ GỘP MỤC: quy tắc
+   gộp nhiều mục tầng "nền" liên tiếp thành MỘT đoạn khái quát CHỈ áp dụng
+   khi "Style tổng thể được hệ thống gán" (xem hồ sơ người đọc ở trên) là
+   "binh_thuong" - trường hợp này việc gộp là ĐÚNG THIẾT KẾ, KHÔNG bị coi là
+   lỗi thứ tự, miễn nội dung đoạn gộp vẫn phản ánh đúng trình tự các mục gốc.
+   Nếu style là "chuyen_sau" hoặc "khong_chuyen_mon", các mục tầng "nền"
+   HẠN CHẾ gộp - mỗi mục NÊN có đoạn/câu riêng; chỉ khi tự nhận thấy các đoạn 
+   ấy có cùng nội dung nên gộp lại thì mới gộp 
    (b) Chi tiết theo tầng: mục tầng "chuyên sâu" PHẢI giữ lại chi tiết cụ
    thể có trong [MỤC N] gốc (số liệu, mốc thời gian, tên đơn vị chủ trì/
-   phối hợp, nhiệm vụ cụ thể). Mục tầng "nền" CHỈ cần nêu khái quát 1 câu,
-   KHÔNG bắt buộc giữ chi tiết cụ thể - đây là ĐÚNG THIẾT KẾ, không phải
-   lỗi.
-   Vì bản tóm tắt là văn xuôi liền mạch không đánh số, hãy xác định đoạn/
-   câu tương ứng với từng [MỤC N] dựa trên NỘI DUNG (chủ đề, tên cơ quan,
-   nhiệm vụ được nhắc tới) trùng khớp với [MỤC N] đó, không dựa vào vị trí
-   đánh số.
+   phối hợp, nhiệm vụ cụ thể).
+   LƯU Ý DÙNG CHUNG CHO MỌI STYLE VÀ MỌI TẦNG (kể cả tầng "chuyên sâu"): số
+   hiệu, ký hiệu hoặc ngày ban hành của các văn bản viện dẫn (ví dụ
+   "777/TTg-TCCV", "1186/KH-BGDĐT", "4054/BGDĐT-GDPT", "551-TB/TU"...) KHÔNG
+   được tính là "chi tiết cần giữ" ở bất kỳ tiêu chí nào bên dưới. Việc bản
+   tóm tắt lược bỏ các số hiệu này là ĐÚNG THIẾT KẾ, TUYỆT ĐỐI KHÔNG được coi
+   là thiếu chi tiết hay căn cứ để fail - dù ở tầng hay style nào.
+
+   Mục tầng "nền" xử lý KHÁC NHAU tùy "Style tổng thể được hệ thống gán":
+    - style "binh_thuong": mục tầng nền PHẢI phản ánh được nội dung chính của
+      mục đó bằng ngôn ngữ phổ thông, không đi sâu vào các chi tiết kỹ thuật,
+      danh sách dài hoặc nhiệm vụ quá cụ thể.
+
+      Toàn bộ các mục tầng nền cộng lại PHẢI bao quát đầy đủ các nhóm nội dung
+      chính của văn bản theo đúng trình tự.
+
+      Không bắt buộc giữ mọi số liệu, mốc thời gian, tên đơn vị hoặc nhiệm vụ
+      chi tiết; tuy nhiên KHÔNG được lược bỏ cả một mục hoặc một nhóm nội dung
+      lớn chỉ vì đó là tầng nền.
+
+      Không fail chỉ vì đoạn dài hơn 1 câu hoặc gồm nhiều đoạn nếu nội dung vẫn
+      dừng ở mức khái quát.
+   - style "chuyen_sau" hoặc "khong_chuyen_mon": mục tầng nền PHẢI giữ lại
+     chi tiết cụ thể (số liệu, mốc thời gian, tên đơn vị, nhiệm vụ cụ thể)
+     giống như mục tầng chuyên sâu, KHÔNG được tóm chung chung/lược bỏ chi
+     tiết - nếu phát hiện thiếu, PHẢI fail và trích dẫn cụ thể [MỤC N] cùng
+     chi tiết bị thiếu, tương tự cách chấm cho mục tầng chuyên sâu.
+    Vì bản tóm tắt là văn xuôi liền mạch không đánh số, hãy xác định đoạn/
+    câu tương ứng với từng [MỤC N] dựa trên NỘI DUNG (chủ đề, tên cơ quan,
+    nhiệm vụ được nhắc tới) trùng khớp với [MỤC N] đó, không dựa vào vị trí
+    đánh số.
+    Đối với mục tầng nền của style "binh_thuong", khi đánh giá cần ưu tiên tính
+    bao quát hơn độ ngắn. Một mục được coi là đạt nếu người đọc có thể hiểu được
+    mục đó đề cập tới vấn đề gì và các nhóm nội dung chính là gì, dù đã lược bỏ
+    các chi tiết cụ thể. Chỉ fail khi bản tóm tắt bỏ hẳn một nhóm nội dung quan
+    trọng hoặc chỉ phản ánh một phần rất nhỏ của mục gốc.
    QUY TẮC BẮT BUỘC: TUYỆT ĐỐI KHÔNG được fail phần (b) chỉ vì ấn tượng
    chung "độ dài tương đương" hay "chưa nổi bật". CHỈ được fail phần (b)
    khi chỉ ra được ÍT NHẤT MỘT chi tiết cụ thể (số liệu/mốc thời gian/tên
@@ -185,8 +222,30 @@ BẢN TÓM TẮT CẦN CHẤM:
 5. giong_dieu_phu_hop: Đoạn ứng với mục tầng "chuyên sâu" phải dùng thuật
    ngữ hành chính/pháp lý/chuyên ngành tự nhiên, KHÔNG giải thích lại khái
    niệm cơ bản. Đoạn ứng với mục tầng "trung bình" phải dùng ngôn ngữ phổ
-   thông, giải thích ngắn gọn nếu buộc dùng thuật ngữ. Đoạn ứng với mục tầng
-   "nền" phải rất ngắn gọn (1-2 câu), ngôn ngữ phổ thông đơn giản.
+   thông, BẮT BUỘC giải thích ngắn gọn ngay khi dùng thuật ngữ hành chính/pháp lý.
+   Đoạn ứng với mục tầng "nền" phải tóm tắt CHUNG CHUNG (không đi vào chi tiết cụ thể), 
+   dùng ngôn ngữ phổ thông đơn giản - không có giới hạn cứng về số câu, chỉ cần đảm
+   bảo nội dung khái quát và ngôn ngữ đơn giản, dễ hiểu.
+   LƯU Ý VĂN PHONG TẦNG NỀN THEO STYLE TỔNG THỂ (xem "Style tổng thể được hệ
+   thống gán" trong hồ sơ người đọc ở trên):
+   - style "chuyen_sau": người đọc có chuyên môn ở mục khác trong văn bản,
+     nên các đoạn tầng nền ĐƯỢC PHÉP dùng các thuật ngữ hành chính PHỔ BIẾN,
+     thông dụng (ví dụ "sáp nhập", "đề án", "Quyết định", "UBND", "tổ chức
+     lại bộ máy") mà KHÔNG bị coi là lỗi - chỉ fail nếu dùng thuật ngữ
+     CHUYÊN NGÀNH của một lĩnh vực cụ thể (không phải thuật ngữ hành chính
+     phổ biến) mà không giải thích.
+   - style "khong_chuyen_mon" hoặc "binh_thuong": các đoạn tầng nền PHẢI
+     dùng ngôn ngữ phổ thông đơn giản hơn, hạn chế cả thuật ngữ hành chính
+     phổ biến - nếu nhắc tới thì BẮT BUỘC phải có giải thích ngắn gọn đi
+     kèm ngay trong câu; đây là điểm khác biệt so với style "chuyen_sau" và
+     KHÔNG được áp cùng một tiêu chuẩn.
+     QUY TẮC BẮT BUỘC: FAIL nếu tìm thấy bất kỳ thuật ngữ hành chính/pháp
+     lý/chuyên ngành nào xuất hiện trong đoạn thuộc tầng "trung bình", hoặc
+     tầng "nền" (khi style là "khong_chuyen_mon"/"binh_thuong"), mà KHÔNG có
+     phần giải thích kèm theo trong cùng câu. Khi fail, PHẢI trích nguyên
+     văn cụm từ thuật ngữ đó (đặt trong dấu ngoặc kép) làm bằng chứng. Nếu
+     không trích dẫn được thuật ngữ cụ thể nào thiếu giải thích, PHẢI để
+     verdict là "pass".
 
 6. thai_do_dung_dan: Bản tóm tắt KHÔNG được tự suy luận, đánh giá, hoặc
    thêm nhận định KHÔNG có trong văn bản gốc. Chỉ trình bày lại nội dung đã
@@ -312,6 +371,7 @@ def in_ket_qua_cham(persona_id, cham):
         print(f" [{persona_id}] Phát hiện fail — rớt {len(fail_list)}/6 tiêu chí: {', '.join(fail_list)}")
     else:
         print(f" [{persona_id}] bỏ qua chấm — {cham.get('note', 'không rõ lý do')}")
+
 
 if __name__ == "__main__":
     import argparse
