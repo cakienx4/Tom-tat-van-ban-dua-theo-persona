@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from pathlib import Path
 
 from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME
@@ -21,8 +22,6 @@ def _chi_so_da_khop_persona(persona_id, ket_qua_khop_persona):
 
         do_tin_cay = entry.get("do_tin_cay", "thap")
 
-        # nếu persona này còn khớp cả nganh_nho cụ thể (không chỉ nganh_to),
-        # nâng độ tin cậy trung bình -> cao; không hạ nếu gốc đã là "cao"
         if do_tin_cay == "trung bình" and persona_id in entry.get(
             "danh_sach_persona_id_khop_ca_nganh_nho", []
         ):
@@ -369,7 +368,11 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--id", help="id cua persona, vi du NN0001")
     group.add_argument("--so-luong", type=int, help="chay tu persona dau tien den persona thu n")
+    group.add_argument("--tu-id", help="chạy từ persona này (vd NN0018), dùng kèm --den-id")
+    parser.add_argument("--den-id", help="id persona kết thúc, dùng kèm --tu-id (vd NN0026)")
     args = parser.parse_args()
+    if args.den_id and not args.tu_id:
+        parser.error("--den-id phải đi kèm --tu-id")
 
     duong_dan_file = Path(args.file)
     if not duong_dan_file.exists():
@@ -422,6 +425,17 @@ if __name__ == "__main__":
         if not personas_can_chay:
             raise SystemExit(
                 f"Không tìm thấy persona có id = {args.id} trong {PROFILE_PATH}"
+            )
+    elif args.tu_id:
+        so_tu = int(re.sub(r"\D", "", args.tu_id))
+        so_den = int(re.sub(r"\D", "", args.den_id)) if args.den_id else so_tu
+        personas_can_chay = [
+            p for p in personas
+            if so_tu <= int(re.sub(r"\D", "", p.get("id", "0"))) <= so_den
+        ]
+        if not personas_can_chay:
+            raise SystemExit(
+                f"Không tìm thấy persona nào trong khoảng {args.tu_id} - {args.den_id or args.tu_id}"
             )
     else:
         personas_can_chay = personas[:args.so_luong]

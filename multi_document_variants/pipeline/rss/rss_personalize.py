@@ -50,7 +50,7 @@ CHU_DE_WEIGHT_FALLBACK = 0.3  # neu chu_de co nhieu hon 3 phan tu
 FILTER_DIR = MD_ROOT / "output" / "rss_filter"
 FILTER_TOKENS_UOC_LUONG_MOI_BAI = 30
 FILTER_MAX_TOKENS_SAN = 2048
-
+SO_CHU_DE_UU_TIEN_TOI_DA_CHO_DAY_DU = 2
 # max_output_tokens duoc tinh DONG theo so luong tin thuc te (xem tom_tat_rss_cho_persona).
 TOKENS_UOC_LUONG_MOI_BAI = 200  # uoc luong so token can de tom tat 1 tin (CAN HIEU CHINH sau khi test thuc te)
 MAX_OUTPUT_TOKENS_SAN = 4096  # san toi thieu, du cho persona it tin

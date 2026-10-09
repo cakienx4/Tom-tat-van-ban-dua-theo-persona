@@ -1,3 +1,5 @@
+# python -m pipeline.hanhchinh.evaluation_hanh_chinh --so-luong 60 --file TB-1077-2026
+
 import json
 import os
 import re
@@ -325,6 +327,20 @@ def cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, model_name=SUMMARY_MODE
             "raw_response": raw,
         }
 
+    # Model đôi khi trả về list ([{...}] hoặc [{tc1}, {tc2}, ...]) thay vì 1 dict
+    if isinstance(cham, list):
+        gop = {}
+        for item in cham:
+            if isinstance(item, dict):
+                gop.update(item)
+        cham = gop
+    if not isinstance(cham, dict) or not cham:
+        return {
+            "id": persona.get("id"),
+            "note": "LỖI: JSON model trả về không đúng cấu trúc (không phải dict), xem raw_response.",
+            "raw_response": raw,
+        }
+
     loi_dinh_dang = []
     for tc in TIEU_CHI:
         gt = cham.get(tc)
@@ -385,7 +401,11 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--id", help="id của persona, ví dụ NN0001")
     group.add_argument("--so-luong", type=int, help="chấm từ persona đầu tiên đến persona thứ n")
+    group.add_argument("--tu-id", help="chạy từ persona này (vd NN0018), dùng kèm --den-id")
+    parser.add_argument("--den-id", help="id persona kết thúc, dùng kèm --tu-id (vd NN0026)")
     args = parser.parse_args()
+    if args.den_id and not args.tu_id:
+        parser.error("--den-id phải đi kèm --tu-id")
 
     duong_dan_file = Path(args.file)
     if not duong_dan_file.exists():
@@ -405,6 +425,17 @@ if __name__ == "__main__":
 
     if args.id:
         personas_can_cham = [args.id]
+    elif args.tu_id:
+        so_tu = int(re.sub(r"\D", "", args.tu_id))
+        so_den = int(re.sub(r"\D", "", args.den_id)) if args.den_id else so_tu
+        personas_can_cham = [
+            p["id"] for p in personas
+            if so_tu <= int(re.sub(r"\D", "", p.get("id", "0"))) <= so_den
+        ]
+        if not personas_can_cham:
+            raise SystemExit(
+                f"Không tìm thấy persona nào trong khoảng {args.tu_id} - {args.den_id or args.tu_id}"
+            )
     else:
         personas_can_cham = [p["id"] for p in personas[:args.so_luong]]
 
