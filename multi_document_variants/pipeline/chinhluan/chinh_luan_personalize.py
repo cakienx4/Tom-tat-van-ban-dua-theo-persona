@@ -251,7 +251,7 @@ def build_chinh_luan_prompt(persona: dict, bai: dict, style: str, genre: str) ->
     loai_hien_thi = LOAI_CHINH_LUAN_HIEN_THI.get(loai, "chính luận")
     phan_tich = bai.get("phan_tich_lap_luan", {})
 
-    ontology_ctx = lay_ontology_context_cho_nganh(_STATE_GRAPH, persona.get("nganh_to", ""))
+    ontology_ctx = lay_ontology_context_cho_nganh(persona.get("nganh_to", ""))
     ontology_section = ""
     if ontology_ctx:
         ontology_section = f"""
@@ -663,6 +663,6 @@ if __name__ == "__main__":
             f.write(ket_qua["summary"])
 
         dinh_dang = "đầy đủ (tiêu đề + mở-thân-kết)" if ket_qua["day_du"] else "vào thẳng vấn đề"
-        print(f"Genre: {ket_qua['genre']} ({ket_qua['genre_score']}) — Style: {ket_qua['style']} — Định dạng: {dinh_dang}")
+        print(f"- Genre: {ket_qua['genre']} ({ket_qua['genre_score']}) \n— Style: {ket_qua['style']} \n— Định dạng: {dinh_dang}")
         print(f"Số luận điểm: {ket_qua['so_luan_diem']}")
         print(f"Đã ghi: {out_path_json}")
