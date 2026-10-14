@@ -1,18 +1,7 @@
-"""
-pipeline/rss/evaluate_rss_summary_gemini.py
-
-Buoc 4 - Danh gia ban tom tat RSS ca nhan hoa bang LLM Judge (Gemini),
-theo khung 6 tieu chi: chon_loc_phu_hop, nhat_quan, trinh_bay_phu_hop,
-bo_cuc_uu_tien, giong_dieu_phu_hop, thai_do_dung_dan.
-
-Doc file ket qua .json da sinh boi rss_personalize.py (khong doc .md,
-vi .json co san ranked_articles/tin_gian_tiep de tra nguoc ve van ban nguon).
-"""
-
-import os
 import json
+import os
 import time
-from collections import Counter
+import re
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -24,12 +13,12 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 MD_ROOT = ROOT_DIR / "multi_document_variants"
 SHARED_ROOT = ROOT_DIR / "shared"
 
-DATA_DIR = MD_ROOT / "data"
+DATA_DIR = MD_ROOT / "data" / "bao_chi"
 OUTPUT_DIR = MD_ROOT / "output" / "bao_chi" / "rss_summary"
 JSON_DIR = OUTPUT_DIR / "json"
 EVAL_DIR = OUTPUT_DIR / "eval"
 
-PERSONAS_PATH = DATA_DIR / "profile" / "state_profiles.json"
+PERSONAS_PATH = MD_ROOT / "data" / "profile" / "state_profiles_nt_nn_tc_kn_cd_ch.json"
 ARTICLES_PATH = DATA_DIR / "vnexpress_rss_snapshot.json"
 
 TIEU_CHI = [
@@ -41,9 +30,10 @@ TIEU_CHI = [
     "thai_do_dung_dan",
 ]
 
-
-def load_personas():
-    with open(PERSONAS_PATH, encoding="utf-8") as f:
+def load_personas(variant=None):
+    ten_file = f"state_profiles_{variant}.json" if variant else "state_profiles_nt_nn_tc_kn_cd_ch.json"
+    duong_dan = MD_ROOT / "data" / "profile_variants" / ten_file
+    with open(duong_dan, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -55,25 +45,13 @@ def load_articles_index():
     return index_theo_link, index_theo_title
 
 
-def lay_noi_dung_nguon(ranked_items: list, index_theo_link: dict, index_theo_title: dict,
-                       dung_full_content: bool = True) -> tuple:
-    """
-    Voi moi item, thu tra theo link truoc, khong khop thi thu theo title.
-    Uu tien lay noi dung day du (content), fallback ve summary (teaser ngan)
-    neu bai khong co content. Tra ve (danh_sach_noi_dung, so_bai_khong_tim_thay).
-    dung_full_content=False -> chi lay summary (teaser). Dung cho tin gian tiep, vi
-    rss_personalize chi dua summary cho model o nhom nay; judge khong duoc thay nhieu hon
-    model da thay, neu khong se bi chan "bo sot" chi tiet model khong he co.
-    """
+def lay_noi_dung_nguon(ranked_items: list, index_theo_link: dict, index_theo_title: dict) -> tuple:
     ket_qua = []
     so_khong_tim_thay = 0
     for item in ranked_items:
         goc = index_theo_link.get(item.get("link")) or index_theo_title.get(item.get("title"))
         if goc:
-            if dung_full_content:
-                noi_dung = goc.get("content") or goc.get("summary", "")
-            else:
-                noi_dung = goc.get("summary", "")
+            noi_dung = goc.get("content") or goc.get("summary", "")
             ket_qua.append({
                 "title": goc.get("title", ""),
                 "noi_dung": noi_dung,
@@ -96,11 +74,14 @@ def _format_nguon(nguon_list: list, nhan: str, prefix: str) -> str:
         dong.append(f"{prefix}{i}. [{n['genre']}] {n['title']}\n{n['noi_dung']}")
     return "\n".join(dong)
 
-import re
+def _tach_doan_van(summary: str) -> list:
+    return [d.strip() for d in summary.split("\n\n") if d.strip()]
 
+
+def _dinh_dang_doan_van(doan_list: list) -> str:
+    return "\n\n".join(f"[ĐOẠN {i}]\n{d}" for i, d in enumerate(doan_list, 1))
 
 def _trich_cac_doan_trich_dan(text: str) -> list:
-    """Tìm tất cả cụm được đặt trong dấu ngoặc kép (kiểu " " hoặc “ ”) trong ly_do."""
     ket_qua = []
     ket_qua.extend(re.findall(r'"([^"]{5,})"', text))
     ket_qua.extend(re.findall(r'“([^”]{5,})”', text))
@@ -111,34 +92,30 @@ def _chuan_hoa(s: str) -> str:
     return re.sub(r"\s+", " ", s or "").strip().lower()
 
 
-def hau_kiem_fail_reasons(cham: dict, summary: str, nguon_chinh: list, nguon_gian_tiep: list) -> dict:
-    """
-    Kiểm tra bán tự động (không dùng LLM) các lý do "fail" judge đưa ra, nhằm phát hiện
-    trường hợp judge trích dẫn sai hoặc bịa nội dung không có thật. KHÔNG tự đảo verdict,
-    chỉ gắn cờ để soát tay - vì bản thân logic tự động này cũng có thể có false positive
-    (ví dụ judge diễn giải lại thay vì trích nguyên văn 100%).
-    """
+def hau_kiem_fail_reasons(cham: dict, summary: str, nguon_chinh: list, nguon_gian_tiep: list,
+                          nguon_bai: list) -> dict:
     canh_bao = []
     summary_chuan = _chuan_hoa(summary)
     nguon_text_chuan = _chuan_hoa(
-        " ".join((n.get("noi_dung", "") + " " + n.get("title", "")) for n in nguon_chinh + nguon_gian_tiep)
+        " ".join((n.get("noi_dung", "") + " " + n.get("title", ""))
+                 for n in nguon_chinh + nguon_gian_tiep + nguon_bai)
     )
-    so_c, so_g = len(nguon_chinh), len(nguon_gian_tiep)
+    so_c, so_g, so_b = len(nguon_chinh), len(nguon_gian_tiep), len(nguon_bai)
 
     for tc, ket in cham.items():
         if not isinstance(ket, dict) or ket.get("verdict") != "fail":
             continue
         ly_do = ket.get("ly_do", "")
 
-        # 1. Mã tin C../G.. được trích dẫn có thực sự tồn tại không
-        for tien_to, so_str in re.findall(r"\b([CG])(\d+)\b", ly_do):
+        for tien_to, so_str in re.findall(r"\b([CGB])(\d+)\b", ly_do):
             so = int(so_str)
             if tien_to == "C" and so > so_c:
                 canh_bao.append(f"[{tc}] trích mã C{so} không tồn tại (nhóm chính chỉ có {so_c} tin).")
             if tien_to == "G" and so > so_g:
                 canh_bao.append(f"[{tc}] trích mã G{so} không tồn tại (nhóm gián tiếp chỉ có {so_g} tin).")
+            if tien_to == "B" and so > so_b:
+                canh_bao.append(f"[{tc}] trích mã B{so} không tồn tại (nhóm góc nhìn chỉ có {so_b} bài).")
 
-        # 2. Trích dẫn "nguyên văn" từ bản tóm tắt có thực sự xuất hiện trong bản tóm tắt không
         for trich in _trich_cac_doan_trich_dan(ly_do):
             if _chuan_hoa(trich) not in summary_chuan:
                 canh_bao.append(
@@ -146,10 +123,15 @@ def hau_kiem_fail_reasons(cham: dict, summary: str, nguon_chinh: list, nguon_gia
                     f"có khả năng judge bịa nội dung."
                 )
 
-        # 3. Khẳng định "bỏ sót" một nội dung cụ thể - kiểm tra nội dung đó có tồn tại
-        #    trong văn bản nguồn hay không
         if any(tu in ly_do.lower() for tu in ["bỏ sót", "bỏ qua", "thiếu nội dung", "không đề cập"]):
-            for trich in _trich_cac_doan_trich_dan(ly_do):
+            cac_trich = _trich_cac_doan_trich_dan(ly_do)
+            if not cac_trich:
+                canh_bao.append(
+                    f"[{tc}] verdict fail với lý do bỏ sót/thiếu nhưng KHÔNG trích dẫn bằng chứng cụ "
+                    f"thể nào (vi phạm QUY TẮC TRÍCH DẪN BẮT BUỘC) - có khả năng judge hallucinate, "
+                    f"cần soát tay."
+                )
+            for trich in cac_trich:
                 trich_chuan = _chuan_hoa(trich)
                 if trich_chuan and trich_chuan not in nguon_text_chuan:
                     canh_bao.append(
@@ -158,77 +140,10 @@ def hau_kiem_fail_reasons(cham: dict, summary: str, nguon_chinh: list, nguon_gia
                         f"không tồn tại."
                     )
 
-    # 4. Cáo buộc "gộp đoạn": kiểm tra tính nhất quán nội tại của lý do
-    doan_list = _tach_doan_van(summary)
-    for tc, ket in cham.items():
-        if not isinstance(ket, dict) or ket.get("verdict") != "fail":
-            continue
-        ly_do = ket.get("ly_do", "")
-        if not any(tu in ly_do.lower() for tu in ["gộp", "cùng một đoạn", "cùng 1 đoạn"]):
-            continue
-        ma_tin = set(re.findall(r"\b([CG]\d+)\b", ly_do))
-        if len(ma_tin) < 2:
-            canh_bao.append(
-                f"[{tc}] cáo buộc gộp đoạn nhưng chỉ nêu {len(ma_tin)} mã tin "
-                f"({', '.join(sorted(ma_tin)) or 'không có'}) cho 2 nội dung khác nhau - nhiều khả năng "
-                f"judge nhầm mã tin (ví dụ C11/C12), cần soát tay đoạn được trích."
-            )
-        for so_doan in re.findall(r"ĐOẠN\s*(\d+)", ly_do):
-            if int(so_doan) > len(doan_list):
-                canh_bao.append(
-                    f"[{tc}] trích [ĐOẠN {so_doan}] nhưng bản tóm tắt chỉ có {len(doan_list)} đoạn."
-                )
-
     return {"can_soat_tay": bool(canh_bao), "chi_tiet_canh_bao": canh_bao}
 
-def _tach_doan_van(summary: str) -> list:
-    return [d.strip() for d in re.split(r"\n\s*\n", summary) if d.strip()]
-
-
-def _dinh_dang_doan_van(doan_list: list) -> str:
-    return "\n\n".join(f"[ĐOẠN {i}]\n{d}" for i, d in enumerate(doan_list, 1))
-
-def _nhom_chu_de_chinh(nguon_chinh: list) -> list:
-    """Gom cac tin C lien tiep cung genre thanh nhom (ranked_articles da xep theo thu tu chu_de).
-    Tra ve [(genre, [ma_tin C..]), ...]."""
-    nhom = []
-    for i, n in enumerate(nguon_chinh, 1):
-        if nhom and nhom[-1][0] == n.get("genre"):
-            nhom[-1][1].append(f"C{i}")
-        else:
-            nhom.append((n.get("genre"), [f"C{i}"]))
-    return nhom
-
-
-def _mo_ta_kiem_tra_chuyen_nhom(nguon_chinh: list) -> str:
-    nhom = _nhom_chu_de_chinh(nguon_chinh)
-    if len(nhom) < 2:
-        return (
-            "KIỂM TRA CHUYỂN NHÓM: bản tóm tắt này chỉ có 1 nhóm chủ đề chính nên KHÔNG có lần "
-            "chuyển nhóm nào — TUYỆT ĐỐI không được chấm fail bo_cuc_uu_tien vì lý do thiếu câu dẫn "
-            "chuyển nhóm."
-        )
-    dong_nhom = "\n".join(
-        f"- Nhóm {i}: {g} ({ds[0]}–{ds[-1]})" if len(ds) > 1 else f"- Nhóm {i}: {g} ({ds[0]})"
-        for i, (g, ds) in enumerate(nhom, 1)
-    )
-    dong_can_dan = "; ".join(
-        f"đoạn tin của {ds[0]} (đầu nhóm {i}: {g})" for i, (g, ds) in enumerate(nhom[1:], 2)
-    )
-    return f"""KIỂM TRA CHUYỂN NHÓM (cấu trúc nhóm dưới đây được tính TỰ ĐỘNG từ dữ liệu — đây là NGUỒN DUY
-NHẤT xác định ranh giới nhóm; KHÔNG dựa vào danh sách "Chủ đề quan tâm" trong hồ sơ vì hôm đó có
-thể không có tin cho một số chủ đề):
-{dong_nhom}
-Số lần chuyển nhóm cần có câu dẫn: {len(nhom) - 1}, đặt ở đầu {dong_can_dan}. Nhóm đầu tiên KHÔNG
-cần câu dẫn. Câu dẫn hợp lệ là một câu ngắn ở đầu đoạn tin đầu tiên của nhóm mới, nêu tên hoặc chủ
-đề của nhóm đó — không bắt buộc đúng cụm "Chuyển sang nhóm". Việc chuyển sang nhóm tin gián tiếp (G)
-KHÔNG tính là chuyển nhóm chính. Chỉ kết luận thiếu câu dẫn khi bạn trích nguyên văn được câu đầu
-của đoạn tin đầu tiên của nhóm mới và câu đó thật sự không nêu chủ đề nhóm; khi đó bo_cuc_uu_tien
-"fail"."""
-
-
-def build_judge_prompt(persona: dict, nguon_chinh: list, nguon_gian_tiep: list, summary: str,
-                        thong_ke: dict) -> str:
+def build_judge_prompt(persona: dict, nguon_chinh: list, nguon_gian_tiep: list, nguon_bai: list,
+                        summary: str, thong_ke: dict) -> str:
     ho_so = f"""
 Vai trò: {persona.get('kinh_nghiem', '')}
 Đơn vị công tác: {persona.get('to_chuc', '')}
@@ -242,16 +157,43 @@ Mô tả chung: {persona.get('mo_ta_chung', '')}
         _format_nguon(nguon_chinh, "VĂN BẢN NGUỒN - nhóm tin chính (đúng chu_de persona)", "C")
         + "\n\n"
         + _format_nguon(nguon_gian_tiep, "VĂN BẢN NGUỒN - nhóm tin liên quan gián tiếp", "G")
+        + "\n\n"
+        + _format_nguon(nguon_bai, "VĂN BẢN NGUỒN - nhóm bài góc nhìn/phân tích liên quan (không phải tin thời sự)", "B")
     )
 
     ghi_chu_danh_so = """
-LƯU Ý QUAN TRỌNG VỀ ĐÁNH SỐ: hai danh sách trên đánh số ĐỘC LẬP với 2 tiền tố khác nhau — "C1,
-C2..." cho nhóm tin chính, "G1, G2..." cho nhóm tin gián tiếp. LUÔN dùng đúng tiền tố khi trích
-dẫn trong ly_do (ví dụ "C4", không viết trống "tin 4"), để tránh nhầm lẫn hai danh sách. Tin
-gián tiếp (G) được PHÉP bị lược bỏ hoàn toàn khỏi bản tóm tắt nếu ít giá trị — KHÔNG được coi
-việc thiếu một tin G nào đó là lỗi chon_loc_phu_hop hay trinh_bay_phu_hop; chỉ tin nhóm chính
-(C) mới bắt buộc đủ 1 tin - 1 đoạn.
+LƯU Ý QUAN TRỌNG VỀ ĐÁNH SỐ: ba danh sách trên đánh số ĐỘC LẬP với 3 tiền tố khác nhau — "C1,
+C2..." cho nhóm tin chính, "G1, G2..." cho nhóm tin gián tiếp, "B1, B2..." cho nhóm bài góc
+nhìn/phân tích. LUÔN dùng đúng tiền tố khi trích dẫn trong ly_do (ví dụ "C4", không viết trống
+"tin 4"), để tránh nhầm lẫn giữa các danh sách. Tin gián tiếp (G) được PHÉP bị lược bỏ hoàn toàn
+khỏi bản tóm tắt nếu ít giá trị — KHÔNG được coi việc thiếu một tin G nào đó là lỗi
+chon_loc_phu_hop hay trinh_bay_phu_hop; tin nhóm chính (C) bắt buộc đủ 1 tin - 1 đoạn, TRỪ
+trường hợp 2 tin C.. được xác nhận cùng nói về MỘT SỰ KIỆN CỤ THỂ (xem quy tắc xác nhận trùng sự
+kiện bên dưới) thì được phép gộp hợp lệ. Nhóm bài góc nhìn/phân tích (B) là nội dung THAM KHẢO
+THÊM, không bắt buộc, có thể có 0, 1 hoặc 2 bài tuỳ ngày — KHÔNG được coi việc thiếu/ít bài nhóm
+B, hoặc việc nhóm B hoàn toàn không xuất hiện, là lỗi chon_loc_phu_hop hay bo_cuc_uu_tien. CHỈ
+đoạn ĐẦU TIÊN ứng với nhóm B trong bản tóm tắt bắt đầu bằng cụm "Góc nhìn liên quan:" — nếu nhóm
+B có nhiều hơn 1 bài (B1, B2...), các đoạn B tiếp theo KHÔNG lặp lại cụm này, mà là các đoạn LIÊN
+TIẾP ngay sau đoạn có prefix đó, luôn nằm ở CUỐI CÙNG bản tóm tắt (đúng bằng số bài trong nhóm B).
+KHÔNG được coi việc các đoạn B sau đoạn đầu không có cụm "Góc nhìn liên quan:" là lỗi thiếu nhất
+quán hay lỗi trình bày. Toàn bộ các đoạn thuộc nhóm B đều KHÔNG tính vào yêu cầu "1 tin - 1 đoạn"
+áp dụng cho nhóm chính.
+
+MỘT SỐ ĐOẠN DẠNG LIỆT KÊ NGẮN CŨNG LÀ HỢP LỆ, KHÔNG PHẢI LỖI GỘP ĐOẠN: đoạn mở đầu bằng cụm "Các
+tin khác đáng chú ý:" được PHÉP liệt kê NHIỀU tin G khác nhau (nhiều mã G cùng xuất hiện) trong
+CÙNG một đoạn — đây là cách trình bày CHỦ ĐÍCH cho các tin gián tiếp giá trị thấp, hoàn toàn KHÁC
+với việc gộp sai 2 tin C của nhóm chính. TUYỆT ĐỐI KHÔNG được áp dụng quy tắc "xác nhận trùng sự
+kiện" hay đòi hỏi tách riêng từng tin G thành 1 đoạn cho đoạn liệt kê này, và KHÔNG được kết luận
+fail (chon_loc_phu_hop, trinh_bay_phu_hop hay bo_cuc_uu_tien) chỉ vì phát hiện nhiều mã G cùng
+nằm trong 1 đoạn dạng liệt kê "Các tin khác đáng chú ý:". Tương tự, nếu bản tóm tắt có từ 2 đoạn
+"Góc nhìn liên quan:" trở lên, việc chúng dùng chung một cụm mở đầu GIỐNG NHAU về câu chữ KHÔNG
+phải là bằng chứng của lỗi gộp/trùng lặp — mỗi đoạn B ứng với MỘT bài riêng biệt (một mã B khác
+nhau), chỉ coi là lỗi nếu nội dung THỰC SỰ trùng lặp (cùng nói về cùng một bài, cùng luận điểm),
+không phải chỉ vì trùng cụm mở đầu.
 """.strip()
+
+    doan_list = _tach_doan_van(summary)
+    doan_van_text = _dinh_dang_doan_van(doan_list)
 
     canh_bao_it_tin = ""
     if thong_ke.get("so_tin_chinh", 0) == 0:
@@ -270,15 +212,9 @@ việc thiếu một tin G nào đó là lỗi chon_loc_phu_hop hay trinh_bay_ph
     - Số tin trong nhóm chính (BẮT BUỘC mỗi tin 1 đoạn riêng trong phần THÂN BÀI): {thong_ke.get('so_tin_chinh')}
     - Tổng số đoạn văn thực tế đếm được trong TOÀN BỘ bản tóm tắt (kể cả mở bài, kết luận, tin
       gián tiếp): {thong_ke.get('so_doan_thuc_te')}
-    - LƯU Ý: con số này CAO HƠN số tin nhóm chính là BÌNH THƯỜNG, vì nó còn gồm dòng tiêu đề
-      (nếu có), đoạn mở bài, đoạn kết luận và các đoạn tin gián tiếp. Chỉ nên nghi ngờ gộp đoạn khi
-      số đoạn thân bài ÍT HƠN số tin nhóm chính, và khi đó vẫn phải chứng minh bằng [ĐOẠN n] cụ thể.
+    - LƯU Ý: con số này CAO HƠN số tin nhóm chính là BÌNH THƯỜNG...(giữ nguyên như cũ)...
     {canh_bao_it_tin}- Ghi chú từ bước sinh bài (nếu có): {thong_ke.get('note') or '(không có)'}
     """.strip()
-
-    doan_list = _tach_doan_van(summary)
-    doan_van_text = _dinh_dang_doan_van(doan_list)
-    kiem_tra_chuyen_nhom = _mo_ta_kiem_tra_chuyen_nhom(nguon_chinh)
 
     prompt = f"""
 Bạn là giám khảo đánh giá bản tóm tắt tin tức cá nhân hóa theo persona công chức/nhà nước.
@@ -297,29 +233,41 @@ trống trong văn bản gốc, đánh số [ĐOẠN 1], [ĐOẠN 2]... — đâ
 cần tự suy đoán):
 {doan_van_text}
 
-BƯỚC BẮT BUỘC TRƯỚC KHI CHẤM (chỉ để bạn tự suy luận, KHÔNG in ra kết quả): với MỖI tin C1,
+BƯỚC BẮT BUỘC TRƯỚC KHI CHẤM (chỉ để bạn tự suy luận, KHÔNG in ra kết quả): trước tiên, xác
+định trong bản tóm tắt đâu là đoạn mở bài, đâu là đoạn kết luận, đâu là (các) đoạn tin gián
+tiếp ở cuối, đâu là (các) đoạn thuộc nhóm B ở cuối cùng (đoạn đầu tiên của nhóm B có prefix
+"Góc nhìn liên quan:", các đoạn B tiếp theo ngay sau đó KHÔNG lặp lại prefix nhưng vẫn thuộc
+nhóm B) — những đoạn này được phép tồn tại thêm, KHÔNG tính vào yêu cầu "1 tin - 1 đoạn".
+Sau khi loại các đoạn đó ra, chỉ còn lại phần THÂN BÀI ứng với nhóm tin chính: với MỖI tin C1,
 C2... trong nhóm chính, xác định nó khớp với [ĐOẠN mấy] trong danh sách đã đánh số ở trên (dùng
 đúng số đoạn đã cho, KHÔNG tự chia lại đoạn theo cách đọc riêng của bạn). Nếu 2 tin khớp với
 CÙNG một số [ĐOẠN], đó là gộp đoạn thật — trích rõ số đoạn đó làm bằng chứng. Nếu 2 tin khớp với
 2 số [ĐOẠN] khác nhau (kể cả liền kề, kể cả không có câu "Chuyển sang nhóm..." ở giữa vì cùng
 nhóm chủ đề thì không cần câu đó), thì đó KHÔNG phải lỗi gộp — không được kết luận fail.
-
-Khi liệt kê từng tin C1, C2... và đối chiếu với đoạn thân bài tương ứng, hãy làm theo thứ tự:
-với MỖI tin C, tìm đúng MỘT đoạn văn trong bản tóm tắt có nội dung khớp với tin đó, và ghi nhận
-vị trí đoạn đó (đoạn thứ mấy tính từ đầu thân bài). Nếu 2 tin liên tiếp trỏ tới cùng một vị trí
-đoạn, đó mới là gộp thật; nếu chúng trỏ tới 2 đoạn khác nhau (dù liền kề nhau), đó KHÔNG phải
-là lỗi gộp.
-
-{kiem_tra_chuyen_nhom}
+Kiểm tra thêm: nếu bản tóm tắt có từ 2 nhóm chủ đề trở lên, xác nhận MỖI lần chuyển nhóm đều có
+câu dẫn báo hiệu (không chỉ lần đầu) — thiếu bất kỳ lần nào thì bo_cuc_uu_tien mặc định "fail".
+Nếu xác nhận có gộp đoạn thật (2 tin C.. cùng khớp 1 số [ĐOẠN]), bước tiếp theo BẮT BUỘC: mở lại
+nội dung nguồn của đúng 2 tin đó (mục VĂN BẢN NGUỒN ở trên, dùng mã C.. để tra) và đối chiếu xem
+chúng có cùng nói về MỘT SỰ KIỆN CỤ THỂ hay không — cùng tên riêng/đơn vị/địa điểm liên quan,
+cùng mốc thời gian, cùng hành động hoặc quyết định đang được nhắc đến.
+- Nếu ĐÚNG là cùng một sự kiện (tin này chỉ đưa thêm chi tiết/góc nhìn cho cùng sự việc ở tin
+  kia): đây là gộp HỢP LỆ — KHÔNG được kết luận fail cho chon_loc_phu_hop, trinh_bay_phu_hop hay
+  bo_cuc_uu_tien chỉ vì lý do "gộp 2 tin". Chỉ được fail nếu đoạn văn gộp đó thực sự thiếu một
+  chi tiết quan trọng của MỘT trong hai nguồn — khi đó phải nêu rõ chi tiết bị thiếu, kèm mã C..
+  tương ứng làm bằng chứng.
+- Nếu là HAI sự kiện khác nhau (khác chủ thể, khác thời điểm, khác nội dung cụ thể dù cùng lĩnh
+  vực) bị gộp chung, hoặc một trong hai bị bỏ hẳn không xuất hiện ở đoạn nào: đây là gộp/bỏ SAI
+  QUY TẮC — kết luận fail cho chon_loc_phu_hop, trích rõ cả 2 mã C.. liên quan và nêu điểm khác
+  biệt cụ thể giữa hai sự kiện (ví dụ khác chủ thể/khác mốc thời gian) làm bằng chứng.
 
 Chấm bản tóm tắt trên theo đúng 6 tiêu chí sau, mỗi tiêu chí trả về "pass" hoặc "fail"
 kèm lý do ngắn gọn (tối đa 2 câu, tiếng Việt có dấu):
 
 1. chon_loc_phu_hop: Bản tóm tắt có ưu tiên chọn chi tiết/dữ kiện liên quan trực tiếp
    đến chu_de và khuynh hướng quan tâm của persona không, có bỏ sót chi tiết quan trọng
-   đúng chuyên môn không, có giữ nhiều chi tiết không liên quan không.
-   LƯU Ý: mọi tin C đều đã được lọc sẵn và BẮT BUỘC có đoạn riêng, nên việc bản tóm tắt CÓ mặt
-   một tin C KHÔNG bị coi là "giữ tin không liên quan"; chỉ xét các chi tiết BÊN TRONG mỗi đoạn.
+   đúng chuyên môn không, có giữ nhiều chi tiết không liên quan không. Riêng với các đoạn
+   gộp 2 tin C.. cùng một sự kiện: áp dụng đúng theo QUY TẮC XÁC NHẬN TRÙNG SỰ KIỆN ở trên,
+   không tự động coi gộp là lỗi.
 2. nhat_quan: Mọi thông tin trong bản tóm tắt có đúng với văn bản nguồn không (không bịa
    thêm số liệu/sự kiện), các câu trong bản tóm tắt có mâu thuẫn nhau không, có gán cho
    persona đặc điểm/quan điểm không có trong hồ sơ không.
@@ -351,12 +299,7 @@ QUY TẮC RIÊNG CHO CÁO BUỘC "GỘP ĐOẠN" HOẶC "BỎ SÓT TIN": nếu l
 chung đoạn với tin khác (ví dụ "gộp C3 và C4 vào cùng một đoạn"), BẮT BUỘC phải trích nguyên
 văn đoạn văn đó trong bản tóm tắt và chỉ ra rõ cả hai nội dung của 2 tin cùng xuất hiện trong
 đúng đoạn văn đó. Nếu không trích ra được một đoạn văn cụ thể chứa CẢ HAI nội dung, thì KHÔNG
-được kết luận có gộp đoạn — phải chuyển sang "pass" cho tiêu chí đó. QUAN TRỌNG: gộp đoạn CHỈ
-tính khi HAI MÃ TIN C KHÁC NHAU (ví dụ C11 và C12) cùng khớp một [ĐOẠN]. Một tin nguồn (một mã C)
-có thể nhắc đến nhiều bên/doanh nghiệp/nhân vật, và đoạn tóm tắt tin đó nhắc đủ các bên ấy là
-ĐÚNG, không phải gộp. Nếu bạn quy hai nội dung trong một đoạn về CÙNG một mã C thì đó KHÔNG phải
-gộp — không được fail vì lý do này; hãy đối chiếu với phần nguồn của mã C đó trước khi kết luận.
-Tương tự, nếu khẳng định
+được kết luận có gộp đoạn — phải chuyển sang "pass" cho tiêu chí đó. Tương tự, nếu khẳng định
 có tin C.. bị bỏ sót hoàn toàn, phải xác nhận đã rà soát TOÀN BỘ các đoạn trong thân bài (không
 chỉ đọc lướt) trước khi kết luận.
 
@@ -402,23 +345,21 @@ def cham_1_persona(persona: dict, ket_qua_rss: dict, index_theo_link: dict, inde
         }
 
     nguon_chinh, thieu_1 = lay_noi_dung_nguon(ket_qua_rss.get("ranked_articles", []), index_theo_link, index_theo_title)
-    nguon_gian_tiep, thieu_2 = lay_noi_dung_nguon(
-        ket_qua_rss.get("tin_gian_tiep", []), index_theo_link, index_theo_title, dung_full_content=False
-    )
-    tong_bai = len(ket_qua_rss.get("ranked_articles", [])) + len(ket_qua_rss.get("tin_gian_tiep", []))
-    tong_thieu = thieu_1 + thieu_2
+    nguon_gian_tiep, thieu_2 = lay_noi_dung_nguon(ket_qua_rss.get("tin_gian_tiep", []), index_theo_link,
+                                                  index_theo_title)
+    nguon_bai, thieu_3 = lay_noi_dung_nguon(ket_qua_rss.get("bai_lien_quan", []), index_theo_link, index_theo_title)
+    for n in nguon_bai:
+        n["genre"] = "Góc nhìn"
+    tong_bai = len(ket_qua_rss.get("ranked_articles", [])) + len(ket_qua_rss.get("tin_gian_tiep", [])) + len(
+        ket_qua_rss.get("bai_lien_quan", []))
+    tong_thieu = thieu_1 + thieu_2 + thieu_3
 
-    # note cua buoc sinh bai co lan cac "CẢNH BÁO" heuristic (bo sot, thieu doan...) - de nguoi
-    # soat tay; KHONG dua sang judge vi se mom san ket luan "fail". Chi giu note thong tin.
-    note_cho_judge = " | ".join(
-        p for p in (ket_qua_rss.get("note") or "").split(" | ") if p and not p.startswith("CẢNH BÁO")
-    )
     thong_ke = {
         "so_tin_chinh": len(ket_qua_rss.get("ranked_articles", [])),
         "so_doan_thuc_te": ket_qua_rss.get("so_doan_thuc_te"),
-        "note": note_cho_judge,
+        "note": ket_qua_rss.get("note"),
     }
-    prompt = build_judge_prompt(persona, nguon_chinh, nguon_gian_tiep, summary, thong_ke)
+    prompt = build_judge_prompt(persona, nguon_chinh, nguon_gian_tiep, nguon_bai, summary, thong_ke)
 
     def _call():
         return client.models.generate_content(
@@ -462,68 +403,58 @@ def cham_1_persona(persona: dict, ket_qua_rss: dict, index_theo_link: dict, inde
         "so_tieu_chi_dat": so_dat,
         "verdict_cuoi": "DAT" if so_dat == len(TIEU_CHI) else "KHONG_DAT",
     }
-    hau_kiem = hau_kiem_fail_reasons(cham, summary, nguon_chinh, nguon_gian_tiep)
-    ket_qua_cham["can_soat_tay"] = hau_kiem["can_soat_tay"]
-    ket_qua_cham["hau_kiem_canh_bao"] = hau_kiem["chi_tiet_canh_bao"]
     if loi_dinh_dang:
         ket_qua_cham["canh_bao_loi_dinh_dang"] = (
             f"Các tiêu chí bị judge trả sai định dạng (đã mặc định fail): {', '.join(loi_dinh_dang)}. "
             f"raw_response đã lưu riêng để soát tay."
         )
         ket_qua_cham["raw_response_loi"] = raw
+
     if tong_thieu > 0:
         ket_qua_cham["canh_bao_thieu_nguon"] = (
             f"{tong_thieu}/{tong_bai} bài không khớp được với văn bản nguồn "
             f"(chỉ còn tiêu đề) - kết quả chấm có thể KHÔNG ĐÁNG TIN CẬY."
         )
+
+    hau_kiem = hau_kiem_fail_reasons(cham, summary, nguon_chinh, nguon_gian_tiep, nguon_bai)
+    if hau_kiem["can_soat_tay"]:
+        ket_qua_cham["can_soat_tay"] = True
+        ket_qua_cham["hau_kiem_canh_bao"] = hau_kiem["chi_tiet_canh_bao"]
+
     return ket_qua_cham
-
-
-def _thong_ke_moi() -> dict:
-    return {"dat": 0, "khong_dat": 0, "bo_qua": 0, "fail_theo_tieu_chi": Counter()}
-
-
-def _cap_nhat_thong_ke(tk: dict, cham: dict) -> None:
-    v = cham.get("verdict_cuoi")
-    if v == "DAT":
-        tk["dat"] += 1
-    elif v == "KHONG_DAT":
-        tk["khong_dat"] += 1
+def in_ket_qua_cham(persona_id: str, cham: dict) -> None:
+    """In nhanh kết quả chấm ra console, kèm tên tiêu chí fail nếu có, để
+    dễ quan sát khi chạy hàng loạt mà không cần mở từng file json."""
+    verdict = cham.get("verdict_cuoi")
+    if verdict == "DAT":
+        print(f" [{persona_id}] ĐẠT cả 6 tiêu chí.")
+    elif verdict == "KHONG_DAT":
+        fail_list = [
+            tc for tc in TIEU_CHI
+            if cham.get("tieu_chi", {}).get(tc, {}).get("verdict") == "fail"
+        ]
+        print(f" [{persona_id}] Phát hiện fail — rớt {len(fail_list)}/6 tiêu chí: {', '.join(fail_list)}")
     else:
-        tk["bo_qua"] += 1
-    for tc, kq in (cham.get("tieu_chi") or {}).items():
-        if isinstance(kq, dict) and kq.get("verdict") == "fail":
-            tk["fail_theo_tieu_chi"][tc] += 1
-
-
-def _in_tong_ket(tk: dict, thoi_gian_giay: float, so_cham_moi: int, so_dung_lai: int) -> None:
-    tong = tk["dat"] + tk["khong_dat"] + tk["bo_qua"]
-    print("\n" + "=" * 55)
-    print(f"ĐÃ CHẤM XONG {so_cham_moi} persona mới (dùng lại kết quả cũ: {so_dung_lai})")
-    print(f"Thời gian: {thoi_gian_giay:.1f}s ({thoi_gian_giay / 60:.1f} phút)")
-    print(f"PASS (đạt cả {len(TIEU_CHI)} tiêu chí):       {tk['dat']}/{tong}")
-    print(f"FAIL (trượt ít nhất 1 tiêu chí): {tk['khong_dat']}/{tong}")
-    if tk["bo_qua"]:
-        print(f"Bỏ qua/lỗi (rỗng, lỗi parse, không có persona): {tk['bo_qua']}/{tong}")
-    if tk["khong_dat"]:
-        print("Số persona fail theo từng tiêu chí:")
-        for tc in TIEU_CHI:
-            print(f"  - {tc}: {tk['fail_theo_tieu_chi'].get(tc, 0)}")
-    print("=" * 55)
-
+        print(f" [{persona_id}] bỏ qua chấm — {cham.get('note', 'không rõ lý do')}")
 
 if __name__ == "__main__":
     import argparse
     from google import genai
 
-    API_KEY = os.getenv("API_KEY")
+    API_KEY = os.getenv("GEMINI_API_KEY")
 
     parser = argparse.ArgumentParser(description="Đánh giá bản tóm tắt RSS bằng LLM Judge (Gemini)")
     parser.add_argument("--id", type=str, help="id của persona, ví dụ NN0001")
     parser.add_argument("-n", "--so-luong", type=int, help="Chỉ đánh giá N kết quả đầu tiên")
+    parser.add_argument("--variant", type=str, default=None, help="ten bien the persona")
     args = parser.parse_args()
-
-    personas = load_personas()
+    if args.variant:
+        JSON_DIR = OUTPUT_DIR / "json" / args.variant
+        EVAL_DIR = OUTPUT_DIR / "eval" / args.variant
+    else:
+        JSON_DIR = OUTPUT_DIR / "json"
+        EVAL_DIR = OUTPUT_DIR / "eval"
+    personas = load_personas(args.variant)
     persona_index = {p["id"]: p for p in personas}
     index_theo_link, index_theo_title = load_articles_index()
     client = genai.Client(api_key=API_KEY)
@@ -541,20 +472,16 @@ if __name__ == "__main__":
             raise SystemExit(f"Không tìm thấy persona có id = {args.id}")
 
         print(f"[{args.id}] đang chấm...")
-        t0 = time.time()
         cham = cham_1_persona(persona, ket_qua_rss, index_theo_link, index_theo_title, client)
+
         out_path = EVAL_DIR / f"{args.id}.json"
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(cham, f, ensure_ascii=False, indent=2)
-        print(f"[{args.id}] xong -> {out_path}")
+        in_ket_qua_cham(args.id, cham)
         if cham.get("can_soat_tay"):
-            print(f"  ⚠ có {len(cham['hau_kiem_canh_bao'])} cảnh báo hậu kiểm - cần soát tay:")
+            print(f" [{args.id}] có {len(cham['hau_kiem_canh_bao'])} cảnh báo hậu kiểm - cần soát tay:")
             for cb in cham["hau_kiem_canh_bao"]:
                 print(f"      - {cb}")
-
-        tk = _thong_ke_moi()
-        _cap_nhat_thong_ke(tk, cham)
-        _in_tong_ket(tk, time.time() - t0, so_cham_moi=1, so_dung_lai=0)
     else:
         danh_sach_file = sorted(JSON_DIR.glob("*.json"))
         if args.so_luong:
@@ -562,45 +489,39 @@ if __name__ == "__main__":
 
         print("Tổng số kết quả cần chấm:", len(danh_sach_file))
         t_bat_dau = time.time()
-        tk = _thong_ke_moi()
-        so_cham_moi = 0
-        so_dung_lai = 0
+        thong_ke_dat = 0
+        thong_ke_khong_dat = 0
+        thong_ke_bo_qua = 0
 
         for json_path in danh_sach_file:
             persona_id = json_path.stem
             out_path = EVAL_DIR / f"{persona_id}.json"
             if out_path.exists():
-                # van tinh vao thong ke de tong ket phan anh du bo du lieu
-                with open(out_path, encoding="utf-8") as f:
-                    _cap_nhat_thong_ke(tk, json.load(f))
-                so_dung_lai += 1
-                print(f"[{persona_id}] đã chấm rồi, bỏ qua (vẫn tính vào thống kê).")
+                print(f"[{persona_id}] đã chấm rồi, bỏ qua.")
                 continue
 
             persona = persona_index.get(persona_id)
             if persona is None:
-                tk["bo_qua"] += 1
                 print(f"[{persona_id}] không tìm thấy persona tương ứng, bỏ qua.")
                 continue
 
             with open(json_path, encoding="utf-8") as f:
                 ket_qua_rss = json.load(f)
-
+            time.sleep(10)
             print(f"[{persona_id}] đang chấm...")
-            t0 = time.time()
             cham = cham_1_persona(persona, ket_qua_rss, index_theo_link, index_theo_title, client)
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(cham, f, ensure_ascii=False, indent=2)
-            so_cham_moi += 1
-            _cap_nhat_thong_ke(tk, cham)
+            in_ket_qua_cham(persona_id, cham)
+            if cham.get("verdict_cuoi") == "DAT":
+                thong_ke_dat += 1
+            elif cham.get("verdict_cuoi") == "KHONG_DAT":
+                thong_ke_khong_dat += 1
+            else:
+                thong_ke_bo_qua += 1
 
-            print(
-                f"[{persona_id}] xong: {cham.get('verdict_cuoi', 'BỎ QUA')} "
-                f"({cham.get('so_tieu_chi_dat', 0)}/{len(TIEU_CHI)} tiêu chí), {time.time() - t0:.1f}s"
-            )
-            if cham.get("can_soat_tay"):
-                print(f"  ⚠ [{persona_id}] có {len(cham['hau_kiem_canh_bao'])} cảnh báo hậu kiểm - cần soát tay:")
-                for cb in cham["hau_kiem_canh_bao"]:
-                    print(f"      - {cb}")
 
-        _in_tong_ket(tk, time.time() - t_bat_dau, so_cham_moi, so_dung_lai)
+        print("\nXONG HẾT. Tổng thời gian:", round((time.time() - t_bat_dau) / 60, 1), "phút")
+        print(f"ĐẠT cả 6 tiêu chí: {thong_ke_dat}")
+        print(f"KHÔNG ĐẠT (thiếu ít nhất 1 tiêu chí): {thong_ke_khong_dat}")
+        print(f"Bỏ qua (rỗng/lỗi/không có persona): {thong_ke_bo_qua}")

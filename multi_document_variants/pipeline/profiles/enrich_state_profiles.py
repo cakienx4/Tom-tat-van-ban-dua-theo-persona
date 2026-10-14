@@ -12,7 +12,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data" / "profile"
 
 load_dotenv()
-API_KEY = os.getenv("API_KEY")
+API_KEY = os.getenv("GEMINI_API_KEY_A")
 MODEL_NAME = "gemini-3.1-flash-lite"
 
 client = genai.Client(api_key=API_KEY)
