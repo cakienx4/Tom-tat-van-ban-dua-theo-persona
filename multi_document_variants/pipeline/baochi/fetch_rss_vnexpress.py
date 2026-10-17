@@ -40,7 +40,7 @@ CATEGORIES = {
     "tam-diem": "Tâm điểm",
 }
 
-BASE_URL = "https://vnexpress.net/rss/{}.rss"
+BASE_URL = "https://vnexpress.net/rss/{}.baochi"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 def clean_summary(raw_html):

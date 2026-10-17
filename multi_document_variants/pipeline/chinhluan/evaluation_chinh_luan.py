@@ -1,34 +1,13 @@
 """
-pipeline/rss/chinhluan/evaluation_chinh_luan.py
+Khung đánh giá gồm 7 tiêu chí:
+1. Giữ đúng lập trường, không suy diễn/thiên lệch
+2. Dùng đúng trình tự: Vấn đề -> Luận điểm -> Luận cứ -> Kết luận
+3. Đầy đủ luận điểm cốt lõi, không bỏ sót thông điệp chính
+4. Bảo toàn mối quan hệ lập luận
+5. Giữ tính thuyết phục
+6. Cá nhân hóa đúng cách - trọng tâm/chi tiết/diễn đạt + mức độ chuyên môn
+7. Mạch lạc, tự nhiên
 
-Danh gia ban tom tat ca nhan hoa 1 bai chinh luan cho 1 persona, dua tren
-7 tieu chi gop tu 10 dieu kien de bai ban dau (khong dung 6 tieu chi cua
-hanh_chinh/bao_chi vi chinh luan co dac thu "giu lap truong tac gia" ma
-2 nhanh kia khong co).
-
-7 tieu chi:
-1. Giu dung lap truong, khong suy dien/thien lech (gop dieu kien 1, 8)
-2. Dung trinh tu Van de -> Luan diem -> Luan cu -> Ket luan (dieu kien 2)
-3. Day du luan diem cot loi, khong bo sot thong diep chinh (gop dieu kien 3, 7)
-4. Bao toan quan he lap luan (dieu kien 4)
-5. Giu tinh thuyet phuc (dieu kien 5)
-6. Ca nhan hoa dung cach - trong tam/chi tiet/dien dat + muc chuyen mon
-   (gop dieu kien 6, 9)
-7. Mach lac, tu nhien (dieu kien 10)
-
-Moi tieu chi bat buoc trich dan bang chung tu CA bai goc lan ban tom tat,
-tranh LLM judge cham khong. Rieng tieu chi 3 va 4 judge phai doi chieu TUNG
-luan diem/quan he cu the, khong cham cam tinh chung chung.
-
-Co lop hau kiem doi chieu voi can_soat_tay/luan_diem_nghi_thieu/
-acronym_nghi_thieu da co san tu buoc personalize - CHI de bao hieu can ra
-tay them, KHONG tu dong dao nguoc verdict cua judge.
-
-Chay:
-  python -m pipeline.rss.chinhluan.evaluation_chinh_luan --bai-id CL0075
-      -> danh gia toan bo persona da co file tom tat trong summary/CL0075/
-  python -m pipeline.rss.chinhluan.evaluation_chinh_luan --bai-id CL0075 --persona-id NN007
-      -> chi danh gia 1 persona
 """
 
 import os
@@ -45,9 +24,9 @@ from google import genai
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
-DUONG_DAN_BAI_MAC_DINH = "output/chinh_luan/phan_tich_lap_luan/tung_bai"
-DUONG_DAN_SUMMARY_MAC_DINH = "output/chinh_luan/summary"
-DUONG_DAN_OUTPUT_MAC_DINH = "output/chinh_luan/evaluation"
+DUONG_DAN_BAI_MAC_DINH = "output/chinh_luan/profile_variant/phan_tich_lap_luan/tung_bai"
+DUONG_DAN_SUMMARY_MAC_DINH = "output/chinh_luan/profile_variant/summary"
+DUONG_DAN_OUTPUT_MAC_DINH = "output/chinh_luan/profile_variant/eval"
 
 TEN_TIEU_CHI = {
     1: "Giữ đúng lập trường, không suy diễn/thiên lệch",
@@ -175,7 +154,8 @@ def goi_llm_danh_gia(client, bai: dict, ket_qua_ca_nhan_hoa: dict, model: str = 
 
 
 # ==== HAU KIEM: doi chieu voi can_soat_tay tu buoc personalize ====
-# CHI de bao hieu them, KHONG tu dong dao nguoc verdict cua judge.
+# CHI de bao hieu them, KHONG tu dong dao nguoc verdict cua judge - dung
+# nguyen tac "hau_kiem_fail_reasons" da dung ben hanh_chinh.
 
 def hau_kiem(danh_gia: dict, ket_qua_ca_nhan_hoa: dict, so_luan_diem_goc: int) -> list:
     ly_do_can_soat_tay = []
@@ -184,8 +164,6 @@ def hau_kiem(danh_gia: dict, ket_qua_ca_nhan_hoa: dict, so_luan_diem_goc: int) -
         return ["LLM judge trả về JSON không hợp lệ, không đánh giá được."]
 
     tieu_chi_3 = danh_gia.get("tieu_chi_3", {})
-    tieu_chi_6 = danh_gia.get("tieu_chi_6", {})
-
     kiem_tra_luan_diem = tieu_chi_3.get("kiem_tra_tung_luan_diem", [])
     if len(kiem_tra_luan_diem) != so_luan_diem_goc:
         ly_do_can_soat_tay.append(
@@ -201,6 +179,7 @@ def hau_kiem(danh_gia: dict, ket_qua_ca_nhan_hoa: dict, so_luan_diem_goc: int) -
         )
 
     acronym_nghi_thieu_tu_personalize = ket_qua_ca_nhan_hoa.get("acronym_nghi_thieu", [])
+    tieu_chi_6 = danh_gia.get("tieu_chi_6", {})
     if acronym_nghi_thieu_tu_personalize and tieu_chi_6.get("dat"):
         ly_do_can_soat_tay.append(
             f"Bước personalize đã nghi các từ viết tắt {acronym_nghi_thieu_tu_personalize} chưa "
@@ -219,7 +198,7 @@ def tinh_ket_qua_chung(danh_gia: dict) -> bool:
     )
 
 
-# ==== CHAY DANH GIA ====
+# ==== CLI ====
 
 def chay_danh_gia(bai_id: str, persona_id: str, duong_dan_bai: str, duong_dan_summary: str,
                    duong_dan_output: str, model: str = SUMMARY_MODEL_NAME):
@@ -275,7 +254,6 @@ def chay_danh_gia(bai_id: str, persona_id: str, duong_dan_bai: str, duong_dan_su
         print(f"  {trang_thai} Tiêu chí {i}: {TEN_TIEU_CHI[i]}")
     print(f"Đã ghi: {out_file}")
 
-
 def chay_danh_gia_toan_bo_bai(bai_id: str, duong_dan_bai: str, duong_dan_summary: str,
                                duong_dan_output: str, model: str = SUMMARY_MODEL_NAME,
                                bo_qua_da_co: bool = True):
@@ -312,26 +290,27 @@ def chay_danh_gia_toan_bo_bai(bai_id: str, duong_dan_bai: str, duong_dan_summary
             print(f"Bỏ qua {persona_id} do lỗi: {loi}")
             continue
 
-
-# ==== CLI ====
-
 def main():
     parser = argparse.ArgumentParser(description="Đánh giá bản tóm tắt cá nhân hóa chính luận theo 7 tiêu chí")
     parser.add_argument("--bai-id", required=True, help="id bài chính luận, ví dụ CL0075")
     parser.add_argument(
-        "--persona-id", default=None,
-        help="id của 1 persona cụ thể, ví dụ NN007. Nếu không truyền, mặc định đánh giá toàn bộ "
-             "persona đã có file tóm tắt trong summary/<bai_id>/"
+        "--id", default=None,
+        help="id của 1 persona cụ thể, ví dụ NN007. Nếu không truyền, mặc định đánh giá toàn bộ persona đã có file tóm tắt trong summary/<bai_id>/"
     )
     parser.add_argument("--bai-input", default=DUONG_DAN_BAI_MAC_DINH)
     parser.add_argument("--summary-input", default=DUONG_DAN_SUMMARY_MAC_DINH)
     parser.add_argument("--output-dir", default=DUONG_DAN_OUTPUT_MAC_DINH)
     parser.add_argument("--model", default=SUMMARY_MODEL_NAME)
+    parser.add_argument("--variant", type=str, default=None, help="ten bien the persona")
     args = parser.parse_args()
 
-    if args.persona_id:
+    if args.variant:
+        args.summary_input = f"{args.summary_input}/{args.variant}"
+        args.output_dir = f"{args.output_dir}/{args.variant}"
+
+    if args.id:
         chay_danh_gia(
-            args.bai_id, args.persona_id,
+            args.bai_id, args.id,
             args.bai_input, args.summary_input, args.output_dir,
             args.model,
         )

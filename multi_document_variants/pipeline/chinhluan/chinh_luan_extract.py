@@ -1,17 +1,15 @@
 import json
 import argparse
 import os
+from pathlib import Path
 
-DUONG_DAN_INPUT_MAC_DINH = "data/chinh_luan/nhandan_chinhluan.json"
-DUONG_DAN_OUTPUT_MAC_DINH = "output/chinh_luan/extracted/chinh_luan_da_tach_doan.json"
+ROOT_DIR = Path(__file__).resolve().parents[2]
+
+DUONG_DAN_INPUT_MAC_DINH = str(ROOT_DIR / "data" / "chinh_luan" / "profile_variant" / "nhandan_chinhluan.json")
+DUONG_DAN_OUTPUT_MAC_DINH = str(ROOT_DIR / "output" / "chinh_luan" / "profile_variant" / "extracted" / "chinh_luan_da_tach_doan.json")
 
 
 def xac_dinh_loai_chinh_luan(category_slug: str, category_name: str) -> str:
-    """
-    Suy ra loai_chinh_luan tu category_slug (uu tien, on dinh hon category_name
-    vi category_name co the bi rut gon, vi du "Binh luan" thay vi "Binh luan - Phe phan").
-    Tra ve "xa_luan", "binh_luan_phe_phan", hoac "khac" neu khong nhan dien duoc.
-    """
     slug = (category_slug or "").lower()
     ten = (category_name or "").lower()
 
@@ -23,10 +21,6 @@ def xac_dinh_loai_chinh_luan(category_slug: str, category_name: str) -> str:
 
 
 def la_dong_ky_ten_nguon(dong: str) -> bool:
-    """
-    Heuristic nhan dien dong ky ten nguon/toa soan o cuoi bai (vi du "NHAN DAN"),
-    khong phai noi dung lap luan: it tu, toan chu hoa, khong ket thuc bang dau cau.
-    """
     dong_sach = dong.strip()
     if not dong_sach:
         return False
@@ -40,11 +34,6 @@ def la_dong_ky_ten_nguon(dong: str) -> bool:
 
 
 def tach_doan_van(noi_dung: str):
-    """
-    Tach content thanh danh sach doan van (dua tren \\n), tach rieng dong ky ten
-    nguon/toa soan o cuoi bai neu co (khong tinh la doan lap luan).
-    Tra ve tuple (doan_list, nguon_ky_ten).
-    """
     if not noi_dung:
         return [], None
 
@@ -61,10 +50,6 @@ def tach_doan_van(noi_dung: str):
 
 
 def dinh_dang_doan_van(doan_list: list) -> str:
-    """
-    Ghep danh sach doan van thanh 1 khoi text, moi doan duoc danh so [DOAN N]
-    de buoc sau (personalize, evaluate) khong phai tu doan ranh gioi doan.
-    """
     khoi_text = []
     for idx, doan in enumerate(doan_list, start=1):
         khoi_text.append(f"[ĐOẠN {idx}] {doan}")
@@ -93,10 +78,6 @@ def xu_ly_mot_bai(bai_goc: dict) -> dict:
 
 
 def doc_va_xu_ly_file(duong_dan_input: str, duong_dan_output: str, id_loc: str = None):
-    """
-    Doc toan bo file JSON chinh luan tho, xu ly tung bai, ghi ra file output.
-    Neu id_loc duoc truyen vao, chi xu ly + in ra 1 bai co id trung khop (de test nhanh).
-    """
     with open(duong_dan_input, "r", encoding="utf-8") as f:
         danh_sach_bai_goc = json.load(f)
 

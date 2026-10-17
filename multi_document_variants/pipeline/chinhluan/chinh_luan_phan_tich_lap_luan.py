@@ -1,5 +1,5 @@
 """
-pipeline/rss/chinhluan/chinh_luan_phan_tich_lap_luan.py
+pipeline/rss/chinhluan/chinh_luan_phan_tich_lap_luan_gemini.py
 
 Phan tich cau truc lap luan cua 1 bai chinh luan (Van de -> Luan diem -> Luan cu -> Ket luan),
 dua tren noi_dung_da_danh_so ([DOAN N]) da tach o chinh_luan_extract.py.
@@ -19,10 +19,10 @@ load_dotenv()
 from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME
 from google import genai
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
-DUONG_DAN_INPUT_MAC_DINH = "output/chinh_luan/extracted/chinh_luan_da_tach_doan.json"
-DUONG_DAN_OUTPUT_MAC_DINH = "output/chinh_luan/phan_tich_lap_luan/chinh_luan_da_phan_tich.json"
+DUONG_DAN_INPUT_MAC_DINH = "output/chinh_luan/profile_variant/extracted/chinh_luan_da_tach_doan.json"
+DUONG_DAN_OUTPUT_MAC_DINH = "output/chinh_luan/profile_variant/phan_tich_lap_luan/chinh_luan_da_phan_tich.json"
 
 PROMPT_PHAN_TICH = """Bạn là chuyên gia phân tích lập luận văn bản chính luận tiếng Việt.
 

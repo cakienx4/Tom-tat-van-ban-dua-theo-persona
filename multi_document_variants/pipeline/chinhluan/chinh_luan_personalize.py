@@ -7,47 +7,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME
-from pipeline.profiles.ontology_context_state import lay_ontology_context_cho_nganh, load_graph
-from pipeline.rss.rss_personalize import (
+ROOT_DIR = Path(__file__).resolve().parents[2]
+
+from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph
+from pipeline.profiles.ontology_context_state import lay_ontology_context_cho_nganh
+from pipeline.baochi.bao_chi_personalize import (
     classify_genre_rss,
     lay_chuc_vu,
     _chon_style,
     CHUC_VU_LANH_DAO_KEYWORDS,
     GENRE_LUON_DAY_DU,
     SO_CHU_DE_UU_TIEN_TOI_DA_CHO_DAY_DU,
-    OPENING_STYLES_MO_BAI,
-    OPENING_STYLES,
-    CLOSING_STYLES,
 )
-
-ROOT_DIR = Path(__file__).resolve().parents[2]
 
 _ONTOLOGY_PATH = ROOT_DIR / "persona_states.ttl"
 _STATE_GRAPH = load_graph(str(_ONTOLOGY_PATH))
 
-PROFILE_PATH = ROOT_DIR / "data" / "profile" / "state_profiles.json"
+PROFILE_PATH = ROOT_DIR / "data" / "profile" / "state_profiles_nt_nn_tc_kn_cd_ch.json"
 
 DUONG_DAN_RAW_MAC_DINH = "data/chinh_luan/nhandan_chinhluan.json"
-DUONG_DAN_INPUT_MAC_DINH = "output/chinh_luan/phan_tich_lap_luan/chinh_luan_da_phan_tich.json"
-DUONG_DAN_OUTPUT_MAC_DINH = "output/chinh_luan/summary"
+DUONG_DAN_INPUT_MAC_DINH = "output/chinh_luan/profile_variant/phan_tich_lap_luan/tung_bai"
+DUONG_DAN_OUTPUT_MAC_DINH = "output/chinh_luan/profile_variant/summary"
 
-# Thu muc cache 2 tang cua lay_bai_da_phan_tich (suy ra tu cau truc thu muc
-# output/chinh_luan/...) - kiem tra lai neu ban goc cua ban khai bao khac.
-EXTRACT_CACHE_DIR = "output/chinh_luan/extracted"
-PHAN_TICH_CACHE_DIR = "output/chinh_luan/phan_tich_lap_luan/tung_bai"
-
-# nguong diem genre de coi la "khop that su" - khop voi RSS_SCORE_THRESHOLD
-# ben rss_personalize.py de dong nhat tieu chi phan loai genre trong toan bo
-# du an, khong dung 2 nguong khac nhau cho cung 1 co che cham diem
 NGUONG_KHOP_GENRE = 0.6
-
-
-# ==== BO STYLE MO/KET BAI RIENG CHO CHINH LUAN ====
-# Khac voi bao chi (gop nhieu tin thanh 1 ban tin), chinh luan la 1 bai x 1
-# persona, nen khong con khai niem "tin so 1"/"nhieu nhom chu de". Rieng phan
-# ket bai TUYET DOI khong duoc goi y hanh dong/theo doi tiep - vi pham dieu
-# kien #1 (khong them y kien ca nhan cua AI ngoai noi dung goc).
 
 OPENING_STYLES_MO_BAI_CHINH_LUAN = [
     "Mở bằng một câu nêu khái quát đúng vấn đề mà bài chính luận đề cập, có thể nhắc thẳng vấn đề/bối cảnh cụ thể của bài, KHÔNG đi vào chi tiết từng luận điểm.",
@@ -70,7 +52,6 @@ CLOSING_STYLES_CHINH_LUAN = [
     "Kết bằng một câu khẳng định dứt khoát đúng tinh thần kết luận/lời kêu gọi của tác giả, KHÔNG thêm bất kỳ khuyến nghị, đề xuất hay gợi ý hành động/theo dõi nào ngoài nội dung đó.",
 ]
 
-
 # ==== BUOC 1: XAC DINH STYLE THEO CHU_DE CUA PERSONA ====
 
 def xac_dinh_style(persona: dict, genre: str, genre_score: float) -> str:
@@ -79,7 +60,7 @@ def xac_dinh_style(persona: dict, genre: str, genre_score: float) -> str:
     chu_de cua persona (chu_de[0] la chu de uu tien hang dau, chu_de[1:] la
     chu de phu - xem pick_chu_de() trong generate_state_profiles.py).
 
-    Tra ve 1 trong 3 style, DONG BO ten voi style cua hanh_chinh_personalize.py
+    Tra ve 1 trong 3 style, DONG BO ten voi style cua hanh_chinh_personalize_gemini.py
     de giu schema thong nhat trong dataset cuoi, nhung y nghia van phong chi
     con 2 nhom hanh vi (xem STYLE_INSTRUCTIONS ben duoi):
     - "chuyen_sau": genre khop dung chu_de[0] va dat nguong tin cay
@@ -117,9 +98,7 @@ STYLE_INSTRUCTIONS = {
         "thong, de hieu. BAT BUOC moi thuat ngu chinh tri/hanh chinh/phap ly/doi "
         "ngoai xuat hien trong bai deu phai co giai thich ngan gon NGAY TRONG "
         "CUNG CAU (dat trong ngoac don hoac noi bang cum tu giai nghia tu nhien), "
-        "khong de thuat ngu dung mot minh khong giai thich. Rieng ten to chuc/"
-        "dien dan viet tat (vi du AIPA, IPU, APPF...) PHAI viet day du ten to "
-        "chuc it nhat 1 lan kem viet tat trong ngoac khi xuat hien lan dau."
+        "khong de thuat ngu dung mot minh khong giai thich."
     ),
     "binh_thuong": (
         "Persona nay HOAN TOAN KHONG lien quan chuyen mon toi chu de cua bai viet. "
@@ -128,9 +107,7 @@ STYLE_INSTRUCTIONS = {
         "xuat hien trong bai deu phai co giai thich ngan gon NGAY TRONG CUNG CAU, "
         "tuong tu yeu cau o muc 'khong_chuyen_mon' nhung can don gian hoa manh hon "
         "nua - han che toi da viec dung tu chuyen nganh neu co the dien dat lai "
-        "bang tu pho thong ma khong lam sai lech y nghia. Ten to chuc/dien dan "
-        "viet tat cung PHAI viet day du ten kem viet tat trong ngoac khi xuat "
-        "hien lan dau."
+        "bang tu pho thong ma khong lam sai lech y nghia."
     ),
 }
 
@@ -142,15 +119,6 @@ LOAI_CHINH_LUAN_HIEN_THI = {
 
 
 # ==== BUOC 2b: XAC DINH DINH DANG (DAY DU vs VAO THANG VAN DE) ====
-# Tai dung tinh than can_van_phong_day_du() ben rss_personalize.py, nhung
-# thay dieu kien "do_tuoi >= 55" (khong dung duoc vi field do_tuoi bi loc
-# mat khoi cac file profile_variants) bang so nam kinh nghiem trich ra tu
-# chinh cau kinh_nghiem - field nay luon co san trong moi bien the profile.
-# Nguong 25 nam khop voi tang cap bac cao nhat trong CAP_BAC_BY_KINHNGHIEM
-# cua generate_state_profiles.py ("Chuyen vien cao cap / Lanh dao", 25-50
-# nam) - tuc la ke ca khi kinh_nghiem khong ghi ro chuc danh lanh dao (vi du
-# chi ghi "Chuyen vien cao cap"), so nam >= 25 van duoc coi la du "tho" de
-# dung van phong trang trong, day du.
 NGUONG_KINH_NGHIEM_TRANG_TRONG = 25
 
 
@@ -165,7 +133,7 @@ def can_van_phong_day_du_chinh_luan(persona: dict, genre: str, loai_chinh_luan: 
     if loai_chinh_luan == "xa_luan":
         return True
 
-    # Binh luan - phe phan linh hoat hon theo persona.
+    # Binh luan - phe phan linh hoat hon theo persona, giu logic cu.
     chuc_vu = lay_chuc_vu(persona.get("kinh_nghiem", "")).lower()
     if any(kw in chuc_vu for kw in CHUC_VU_LANH_DAO_KEYWORDS):
         return True
@@ -177,7 +145,6 @@ def can_van_phong_day_du_chinh_luan(persona: dict, genre: str, loai_chinh_luan: 
         return True
 
     return False
-
 
 # ==== BUOC 3: DUNG PROMPT ====
 
@@ -207,13 +174,7 @@ def _dinh_dang_danh_sach_luan_diem(phan_tich: dict) -> str:
 
 
 def _dinh_dang_bo_cuc(persona: dict, genre: str, van_de: str, loai_chinh_luan: str) -> tuple:
-    """
-    Tra ve (yeu_cau_dinh_dang_text, day_du: bool) - quyet dinh bai tom tat
-    "vao thang van de" hay "day du tieu de + mo-than-ket" (danh cho xa luan,
-    lanh dao/persona nhieu nam kinh nghiem/chu de nhay cam dung chuyen mon chinh).
-    """
     day_du = can_van_phong_day_du_chinh_luan(persona, genre, loai_chinh_luan)
-
     opening_style = (
         _chon_style(persona.get("id", ""), OPENING_STYLES_MO_BAI_CHINH_LUAN)
         if day_du
@@ -335,9 +296,8 @@ def build_chinh_luan_prompt(persona: dict, bai: dict, style: str, genre: str) ->
     4. Bản tóm tắt còn giữ được tính THUYẾT PHỤC của bài gốc không, hay đã biến
        thành liệt kê sự kiện khô khan (đặc biệt cần chú ý ở văn phong đơn giản hóa)?
     5. Nếu style là "khong_chuyen_mon" hoặc "binh_thuong": rà lại từng câu, liệt
-       kê trong đầu các thuật ngữ chính trị/hành chính/pháp lý/đối ngoại và các
-       tên viết tắt tổ chức xuất hiện, kiểm tra từng thuật ngữ đã có giải thích
-       trong câu chưa.
+       kê trong đầu các thuật ngữ chính trị/hành chính/pháp lý/đối ngoại xuất
+       hiện, kiểm tra từng thuật ngữ đã có giải thích trong câu chưa.
     Chỉ trả về bản đã kiểm tra lại, không trả về bản nháp.
     """.strip()
 
@@ -375,14 +335,15 @@ def _luan_diem_nghi_thieu(summary: str, danh_sach_luan_diem: list, nguong_ty_le:
             chi_so_nghi_thieu.append(i)
     return chi_so_nghi_thieu
 
-
+_RE_TIEN_TO_DOAN = re.compile(r"\[ĐOẠN \d+\]\s*")
 # ==== BUOC 3c: HAU KIEM THUAT NGU CHUA GIAI THICH (chi ap dung khi style != "chuyen_sau") ====
 
 _RE_ACRONYM = re.compile(r"\b[A-Z]{2,6}\b")
 _RE_ROMAN_NUMERAL = re.compile(r"^[IVXLCDM]+$")
 
 # Cac tu viet hoa ngan nhung KHONG phai acronym can giai thich (so thu tu La
-# Ma trong ten Dai hoi/khoa se bi regex bat nham).
+# Ma trong ten Dai hoi/khoa se bi regex bat nham, loai truoc o day cho gon
+# thay vi check roman numeral runtime nhieu lan cho cung 1 tu quen thuoc).
 _NGOAI_LE_ACRONYM = {"XII", "XIII", "XIV", "XV", "XVI"}
 
 
@@ -427,32 +388,104 @@ def _thuat_ngu_chua_giai_thich(summary: str, style: str) -> list:
 
     return chua_giai_thich
 
-
-# ==== BUOC 3d: VAN BAN DUNG DE CHAM DIEM GENRE ====
-
-_RE_TIEN_TO_DOAN = re.compile(r"\[ĐOẠN \d+\]\s*")
-
-
 def _lay_van_ban_cham_genre_chinh_luan(bai: dict) -> str:
-    """
-    Chinh luan la van ban dai, tu khoa dac trung the loai nam rai rac trong
-    toan bai chu khong tap trung o title/summary nhu tin/bai bao chi ngan.
-    Dung ca noi_dung_da_danh_so (da bo tien to [DOAN N]) de cham diem genre,
-    tranh diem qua thap khien style bi day sai ve "binh_thuong".
-    """
     noi_dung = bai.get("noi_dung_da_danh_so", "")
     noi_dung_sach = _RE_TIEN_TO_DOAN.sub("", noi_dung)
     return f"{bai.get('title', '')} {noi_dung_sach}"
 
+def tom_tat_chinh_luan_cho_persona(persona: dict, bai: dict, client,
+                                    model_name: str = SUMMARY_MODEL_NAME) -> dict:
+    phan_tich = bai.get("phan_tich_lap_luan", {})
+    danh_sach_luan_diem = phan_tich.get("danh_sach_luan_diem", [])
+    if not danh_sach_luan_diem:
+        print(f"Bài {bai.get('id')} không có phân tích lập luận hợp lệ, bỏ qua persona {persona.get('id')}.")
+        return {
+            "id": persona.get("id"),
+            "bai_id": bai.get("id"),
+            "loi": "thieu_phan_tich_lap_luan",
+        }
 
-# ==== BUOC 3e: LAY BAI DA PHAN TICH (CACHE 2 TANG) ====
+    text_de_cham_genre = _lay_van_ban_cham_genre_chinh_luan(bai)
+    genre, genre_score = classify_genre_rss(text_de_cham_genre)
+
+    style = xac_dinh_style(persona, genre, genre_score)
+    prompt, day_du = build_chinh_luan_prompt(persona, bai, style, genre)
+
+    def _goi():
+        return client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config={"temperature": 0.0},
+        )
+
+    summary = ""
+    chi_so_nghi_thieu = []
+    acronym_nghi_thieu = []
+    for lan_thu in range(SO_LAN_THU_LAI_KIEM_TRA_LUAN_DIEM + 1):
+        response = retry_generate(_goi)
+        summary = response.text.strip()
+        chi_so_nghi_thieu = _luan_diem_nghi_thieu(summary, danh_sach_luan_diem)
+        acronym_nghi_thieu = _thuat_ngu_chua_giai_thich(summary, style)
+
+        if not chi_so_nghi_thieu and not acronym_nghi_thieu:
+            break
+
+        if lan_thu < SO_LAN_THU_LAI_KIEM_TRA_LUAN_DIEM:
+            ghi_chu_loi = []
+            if chi_so_nghi_thieu:
+                ghi_chu_loi.append(
+                    f"đã bỏ sót hoặc lược quá mạnh luận điểm số {chi_so_nghi_thieu} "
+                    f"trong danh sách luận điểm ở trên - PHẢI bổ sung đủ"
+                )
+            if acronym_nghi_thieu:
+                ghi_chu_loi.append(
+                    f"dùng các từ viết tắt {acronym_nghi_thieu} mà KHÔNG giải thích - "
+                    f"PHẢI thêm giải thích ngắn gọn (tên đầy đủ trong ngoặc) ngay khi "
+                    f"từ đó xuất hiện lần đầu"
+                )
+            print(f"Bài {bai.get('id')} — persona {persona.get('id')}: {'; '.join(ghi_chu_loi)}, thử lại...")
+            prompt += (
+                f"\n\nLƯU Ý QUAN TRỌNG: bản nháp trước có dấu hiệu " + "; ".join(ghi_chu_loi) + "."
+            )
+        else:
+            ghi_chu_loi = []
+            if chi_so_nghi_thieu:
+                ghi_chu_loi.append(f"luận điểm số {chi_so_nghi_thieu}")
+            if acronym_nghi_thieu:
+                ghi_chu_loi.append(f"từ viết tắt {acronym_nghi_thieu} chưa giải thích")
+            print(f"Bài {bai.get('id')} — persona {persona.get('id')}: vẫn nghi vấn {'; '.join(ghi_chu_loi)} sau khi thử lại, cần rà thủ công.")
+
+    return {
+        "id": persona.get("id"),
+        "bai_id": bai.get("id"),
+        "loai_chinh_luan": bai.get("loai_chinh_luan"),
+        "genre": genre,
+        "genre_score": round(genre_score, 2),
+        "style": style,
+        "day_du": day_du,
+        "summary": summary,
+        "so_luan_diem": len(danh_sach_luan_diem),
+        "can_soat_tay": bool(chi_so_nghi_thieu or acronym_nghi_thieu),
+        "luan_diem_nghi_thieu": chi_so_nghi_thieu,
+        "acronym_nghi_thieu": acronym_nghi_thieu,
+    }
+
+
+# ==== BUOC 3c: TU CHAY EXTRACT + PHAN TICH LAP LUAN (CO CACHE), GIONG PATTERN HANH CHINH ====
+# Hanh chinh cache theo ten_file_goc (docx). Chinh luan khong doc docx ma doc
+# 1 file JSON crawl RSS chua nhieu bai, nen cache o day duoc khoa theo bai_id
+# thay vi ten file - moi bai 1 file cache rieng trong 2 thu muc duoi day.
+
+EXTRACT_CACHE_DIR = "output/chinh_luan/profile_variant/extracted"
+PHAN_TICH_CACHE_DIR = "output/chinh_luan/profile_variant/phan_tich_lap_luan/tung_bai"
+
 
 def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client,
                           model_name: str = SUMMARY_MODEL_NAME) -> dict:
     """
     Tra ve 1 bai chinh luan da qua ca 2 buoc extract + phan_tich_lap_luan,
     tu dong chay 2 buoc do neu chua co cache, khong can nguoi dung tu chay
-    chinh_luan_extract.py / chinh_luan_phan_tich_lap_luan.py thu cong truoc.
+    chinh_luan_extract.py / chinh_luan_phan_tich_lap_luan_gemini.py thu cong truoc.
     """
     from pipeline.chinhluan.chinh_luan_extract import xu_ly_mot_bai
     from pipeline.chinhluan.chinh_luan_phan_tich_lap_luan import goi_llm_phan_tich
@@ -507,86 +540,6 @@ def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client,
     return bai
 
 
-# ==== BUOC 4: HAM CHAY CHINH CHO 1 (BAI, PERSONA) ====
-
-def tom_tat_chinh_luan_cho_persona(persona: dict, bai: dict, client,
-                                    model_name: str = SUMMARY_MODEL_NAME) -> dict:
-    phan_tich = bai.get("phan_tich_lap_luan", {})
-    danh_sach_luan_diem = phan_tich.get("danh_sach_luan_diem", [])
-    if not danh_sach_luan_diem:
-        print(f"Bài {bai.get('id')} không có phân tích lập luận hợp lệ, bỏ qua persona {persona.get('id')}.")
-        return {
-            "id": persona.get("id"),
-            "bai_id": bai.get("id"),
-            "loi": "thieu_phan_tich_lap_luan",
-        }
-
-    text_de_cham_genre = _lay_van_ban_cham_genre_chinh_luan(bai)
-    genre, genre_score = classify_genre_rss(text_de_cham_genre)
-
-    style = xac_dinh_style(persona, genre, genre_score)
-    prompt, day_du = build_chinh_luan_prompt(persona, bai, style, genre)
-
-    def _goi():
-        return client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config={"temperature": 0.0},
-        )
-
-    summary = ""
-    chi_so_nghi_thieu = []
-    acronym_nghi_thieu = []
-    for lan_thu in range(SO_LAN_THU_LAI_KIEM_TRA_LUAN_DIEM + 1):
-        response = retry_generate(_goi)
-        summary = response.text.strip()
-        chi_so_nghi_thieu = _luan_diem_nghi_thieu(summary, danh_sach_luan_diem)
-        acronym_nghi_thieu = _thuat_ngu_chua_giai_thich(summary, style)
-
-        if not chi_so_nghi_thieu and not acronym_nghi_thieu:
-            break
-
-        if lan_thu < SO_LAN_THU_LAI_KIEM_TRA_LUAN_DIEM:
-            ghi_chu_loi = []
-            if chi_so_nghi_thieu:
-                ghi_chu_loi.append(
-                    f"đã bỏ sót hoặc lược quá mạnh luận điểm số {chi_so_nghi_thieu} "
-                    f"trong danh sách luận điểm ở trên - PHẢI bổ sung đủ"
-                )
-            if acronym_nghi_thieu:
-                ghi_chu_loi.append(
-                    f"dùng các từ viết tắt {acronym_nghi_thieu} mà KHÔNG giải thích - "
-                    f"PHẢI thêm giải thích ngắn gọn (tên đầy đủ trong ngoặc) ngay khi "
-                    f"từ đó xuất hiện lần đầu"
-                )
-            print(f"Bài {bai.get('id')} — persona {persona.get('id')}: {'; '.join(ghi_chu_loi)}, thử lại...")
-            prompt += (
-                "\n\nLƯU Ý QUAN TRỌNG: bản nháp trước có dấu hiệu " + "; ".join(ghi_chu_loi) + "."
-            )
-        else:
-            ghi_chu_loi = []
-            if chi_so_nghi_thieu:
-                ghi_chu_loi.append(f"luận điểm số {chi_so_nghi_thieu}")
-            if acronym_nghi_thieu:
-                ghi_chu_loi.append(f"từ viết tắt {acronym_nghi_thieu} chưa giải thích")
-            print(f"Bài {bai.get('id')} — persona {persona.get('id')}: vẫn nghi vấn {'; '.join(ghi_chu_loi)} sau khi thử lại, cần rà thủ công.")
-
-    return {
-        "id": persona.get("id"),
-        "bai_id": bai.get("id"),
-        "loai_chinh_luan": bai.get("loai_chinh_luan"),
-        "genre": genre,
-        "genre_score": round(genre_score, 2),
-        "style": style,
-        "day_du": day_du,
-        "summary": summary,
-        "so_luan_diem": len(danh_sach_luan_diem),
-        "can_soat_tay": bool(chi_so_nghi_thieu or acronym_nghi_thieu),
-        "luan_diem_nghi_thieu": chi_so_nghi_thieu,
-        "acronym_nghi_thieu": acronym_nghi_thieu,
-    }
-
-
 # ==== BUOC 5: CLI ====
 
 if __name__ == "__main__":
@@ -598,7 +551,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input", default=DUONG_DAN_INPUT_MAC_DINH,
         help="Đường dẫn file JSON chính luận đã phân tích lập luận SẴN CÓ (nếu bạn đã tự "
-             "chạy chinh_luan_extract.py + chinh_luan_phan_tich_lap_luan.py trước và có "
+             "chạy chinh_luan_extract.py + chinh_luan_phan_tich_lap_luan_gemini.py trước và có "
              "1 file gộp nhiều bài). Nếu bài cần chạy KHÔNG có trong file này, script sẽ "
              "tự tách đoạn + phân tích lập luận cho bài đó từ --raw-input."
     )
@@ -612,33 +565,61 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--id", help="id của persona, ví dụ NN001")
     group.add_argument("--so-luong", type=int, help="chạy từ persona đầu tiên đến persona thứ n")
+    group.add_argument("--tu-id", help="chạy từ persona này (vd NN0001), dùng kèm --den-id")
+    parser.add_argument("--den-id", help="id persona kết thúc, dùng kèm --tu-id (vd NN0050)")
     parser.add_argument("--model", default=SUMMARY_MODEL_NAME)
+    parser.add_argument(
+        "--variant",
+        type=str,
+        default=None,
+        help="ten bien the persona, neu co se ghi vao thu muc con rieng de tranh de len du lieu persona day du truong"
+    )
     args = parser.parse_args()
+
+    if args.den_id and not args.tu_id:
+        parser.error("--den-id phải đi kèm --tu-id")
 
     client = genai.Client(api_key=API_KEY)
 
     bai = None
-    duong_dan_input = ROOT_DIR / args.input if not Path(args.input).is_absolute() else Path(args.input)
+    thu_muc_input = ROOT_DIR / args.input if not Path(args.input).is_absolute() else Path(args.input)
+    duong_dan_input = thu_muc_input / f"{args.bai_id}.json"
     if duong_dan_input.exists():
         with open(duong_dan_input, encoding="utf-8") as f:
-            danh_sach_bai = json.load(f)
-        bai = next((b for b in danh_sach_bai if b.get("id") == args.bai_id), None)
+            bai = json.load(f)
+    else:
+        print(f"[CANH BAO] Khong tim thay file bai viet: {duong_dan_input}")
 
     if bai is None:
         duong_dan_raw = ROOT_DIR / args.raw_input if not Path(args.raw_input).is_absolute() else Path(args.raw_input)
         bai = lay_bai_da_phan_tich(args.bai_id, duong_dan_raw, client, model_name=args.model)
 
-    with open(PROFILE_PATH, encoding="utf-8") as f:
+    ten_file_persona = f"state_profiles_{args.variant}.json" if args.variant else "state_profiles_nt_nn_tc_kn_cd_ch.json"
+    duong_dan_persona = ROOT_DIR / "data" / "profile" / ten_file_persona
+    with open(duong_dan_persona, encoding="utf-8") as f:
         personas = json.load(f)
 
     if args.id:
         personas_can_chay = [p for p in personas if p.get("id") == args.id]
         if not personas_can_chay:
             raise SystemExit(f"Không tìm thấy persona có id = {args.id} trong {PROFILE_PATH}")
+    elif args.tu_id:
+        so_tu = int(re.sub(r"\D", "", args.tu_id))
+        so_den = int(re.sub(r"\D", "", args.den_id)) if args.den_id else so_tu
+        personas_can_chay = [
+            p for p in personas
+            if so_tu <= int(re.sub(r"\D", "", p.get("id", "0"))) <= so_den
+        ]
+        if not personas_can_chay:
+            raise SystemExit(f"Không tìm thấy persona nào trong khoảng {args.tu_id} - {args.den_id or args.tu_id}")
     else:
         personas_can_chay = personas[:args.so_luong]
 
-    out_dir = ROOT_DIR / args.output_dir / args.bai_id
+    thanh_phan_dir = [ROOT_DIR, args.output_dir]
+    if args.variant:
+        thanh_phan_dir.append(args.variant)
+    thanh_phan_dir.append(args.bai_id)
+    out_dir = Path(*thanh_phan_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     tong = len(personas_can_chay)
@@ -653,16 +634,12 @@ if __name__ == "__main__":
         print(f"\n[{i}/{tong}] Bắt đầu xử lý {persona['id']}...")
         ket_qua = tom_tat_chinh_luan_cho_persona(persona, bai, client, model_name=args.model)
 
-        if ket_qua.get("loi"):
-            print(f"Bỏ qua ghi file cho {persona['id']} do lỗi: {ket_qua['loi']}")
-            continue
-
         with open(out_path_json, "w", encoding="utf-8") as f:
             json.dump(ket_qua, f, ensure_ascii=False, indent=2)
         with open(out_path_md, "w", encoding="utf-8") as f:
             f.write(ket_qua["summary"])
 
         dinh_dang = "đầy đủ (tiêu đề + mở-thân-kết)" if ket_qua["day_du"] else "vào thẳng vấn đề"
-        print(f"- Genre: {ket_qua['genre']} ({ket_qua['genre_score']}) \n— Style: {ket_qua['style']} \n— Định dạng: {dinh_dang}")
+        print(f"Genre: {ket_qua['genre']} ({ket_qua['genre_score']}) — Style: {ket_qua['style']} — Định dạng: {dinh_dang}")
         print(f"Số luận điểm: {ket_qua['so_luan_diem']}")
         print(f"Đã ghi: {out_path_json}")

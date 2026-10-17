@@ -16,7 +16,7 @@ CATEGORIES = {
     "binh-luan-phe-phan-1180": "Bình luận",
 }
 
-BASE_URL = "https://nhandan.vn/rss/{}.rss"
+BASE_URL = "https://nhandan.vn/rss/{}.baochi"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 ID_PREFIX = "CL"

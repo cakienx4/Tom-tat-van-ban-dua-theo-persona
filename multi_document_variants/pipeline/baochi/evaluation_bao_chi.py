@@ -14,11 +14,10 @@ MD_ROOT = ROOT_DIR / "multi_document_variants"
 SHARED_ROOT = ROOT_DIR / "shared"
 
 DATA_DIR = MD_ROOT / "data" / "bao_chi"
-OUTPUT_DIR = MD_ROOT / "output" / "bao_chi" / "rss_summary"
+OUTPUT_DIR = MD_ROOT / "output" / "bao_chi" / "profile_variant" / "rss_summary"
 JSON_DIR = OUTPUT_DIR / "json"
 EVAL_DIR = OUTPUT_DIR / "eval"
 
-PERSONAS_PATH = MD_ROOT / "data" / "profile" / "state_profiles_nt_nn_tc_kn_cd_ch.json"
 ARTICLES_PATH = DATA_DIR / "vnexpress_rss_snapshot.json"
 
 TIEU_CHI = [
@@ -32,7 +31,7 @@ TIEU_CHI = [
 
 def load_personas(variant=None):
     ten_file = f"state_profiles_{variant}.json" if variant else "state_profiles_nt_nn_tc_kn_cd_ch.json"
-    duong_dan = MD_ROOT / "data" / "profile_variants" / ten_file
+    duong_dan = MD_ROOT / "data" / "profile" / ten_file
     with open(duong_dan, encoding="utf-8") as f:
         return json.load(f)
 
@@ -441,7 +440,7 @@ if __name__ == "__main__":
     import argparse
     from google import genai
 
-    API_KEY = os.getenv("GEMINI_API_KEY")
+    API_KEY = os.getenv("GEMINI_API_KEY_2")
 
     parser = argparse.ArgumentParser(description="Đánh giá bản tóm tắt RSS bằng LLM Judge (Gemini)")
     parser.add_argument("--id", type=str, help="id của persona, ví dụ NN0001")

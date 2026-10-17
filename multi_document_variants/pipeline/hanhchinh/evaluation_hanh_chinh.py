@@ -1,5 +1,3 @@
-# python -m pipeline.hanhchinh.evaluation_hanh_chinh --so-luong 60 --file TB-1077-2026
-
 import json
 import os
 import re
@@ -177,7 +175,7 @@ BẢN TÓM TẮT CẦN CHẤM:
    (b) Chi tiết theo tầng: mục tầng "chuyên sâu" PHẢI giữ lại chi tiết cụ
    thể có trong [MỤC N] gốc (số liệu, mốc thời gian, tên đơn vị chủ trì/
    phối hợp, nhiệm vụ cụ thể).
-   LƯU Ý DÙNG CHUNG CHO MỌI STYLE VÀ MỌI TẦNG (kể cả tầng "chuyên sâu"): số
+    LƯU Ý DÙNG CHUNG CHO MỌI STYLE VÀ MỌI TẦNG (kể cả tầng "chuyên sâu"): số
    hiệu, ký hiệu hoặc ngày ban hành của các văn bản viện dẫn (ví dụ
    "777/TTg-TCCV", "1186/KH-BGDĐT", "4054/BGDĐT-GDPT", "551-TB/TU"...) KHÔNG
    được tính là "chi tiết cần giữ" ở bất kỳ tiêu chí nào bên dưới. Việc bản
@@ -224,9 +222,9 @@ BẢN TÓM TẮT CẦN CHẤM:
 5. giong_dieu_phu_hop: Đoạn ứng với mục tầng "chuyên sâu" phải dùng thuật
    ngữ hành chính/pháp lý/chuyên ngành tự nhiên, KHÔNG giải thích lại khái
    niệm cơ bản. Đoạn ứng với mục tầng "trung bình" phải dùng ngôn ngữ phổ
-   thông, BẮT BUỘC giải thích ngắn gọn ngay khi dùng thuật ngữ hành chính/pháp lý.
-   Đoạn ứng với mục tầng "nền" phải tóm tắt CHUNG CHUNG (không đi vào chi tiết cụ thể), 
-   dùng ngôn ngữ phổ thông đơn giản - không có giới hạn cứng về số câu, chỉ cần đảm
+   thông, giải thích ngắn gọn nếu buộc dùng thuật ngữ. Đoạn ứng với mục tầng
+   "nền" phải tóm tắt CHUNG CHUNG (không đi vào chi tiết cụ thể), dùng ngôn
+   ngữ phổ thông đơn giản - không có giới hạn cứng về số câu, chỉ cần đảm
    bảo nội dung khái quát và ngôn ngữ đơn giản, dễ hiểu.
    LƯU Ý VĂN PHONG TẦNG NỀN THEO STYLE TỔNG THỂ (xem "Style tổng thể được hệ
    thống gán" trong hồ sơ người đọc ở trên):
@@ -326,18 +324,13 @@ def cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, model_name=SUMMARY_MODE
             "note": "LỖI: không parse được JSON từ model, xem raw_response.",
             "raw_response": raw,
         }
-
-    # Model đôi khi trả về list ([{...}] hoặc [{tc1}, {tc2}, ...]) thay vì 1 dict
-    if isinstance(cham, list):
-        gop = {}
-        for item in cham:
-            if isinstance(item, dict):
-                gop.update(item)
-        cham = gop
-    if not isinstance(cham, dict) or not cham:
+    if not isinstance(cham, dict):
         return {
             "id": persona.get("id"),
-            "note": "LỖI: JSON model trả về không đúng cấu trúc (không phải dict), xem raw_response.",
+            "note": (
+                "LỖI: judge trả về JSON không đúng dạng object (nhận được "
+                f"{type(cham).__name__} thay vì dict) - xem raw_response."
+            ),
             "raw_response": raw,
         }
 
@@ -392,50 +385,41 @@ def in_ket_qua_cham(persona_id, cham):
 if __name__ == "__main__":
     import argparse
     from google import genai
-    from pipeline.hanhchinh.hanh_chinh_persona_match import PROFILE_PATH
 
-    API_KEY = os.getenv("API_KEY")
+    API_KEY = os.getenv("GEMINI_API_KEY")
 
     parser = argparse.ArgumentParser(description="Đánh giá bản tóm tắt hành chính bằng LLM Judge")
     parser.add_argument("--file", required=True, help="tên file docx văn bản hành chính (không cần đường dẫn đầy đủ)")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--id", help="id của persona, ví dụ NN0001")
     group.add_argument("--so-luong", type=int, help="chấm từ persona đầu tiên đến persona thứ n")
-    group.add_argument("--tu-id", help="chạy từ persona này (vd NN0018), dùng kèm --den-id")
-    parser.add_argument("--den-id", help="id persona kết thúc, dùng kèm --tu-id (vd NN0026)")
+    parser.add_argument("--variant", type=str, default=None, help="ten bien the persona")
     args = parser.parse_args()
-    if args.den_id and not args.tu_id:
-        parser.error("--den-id phải đi kèm --tu-id")
 
     duong_dan_file = Path(args.file)
     if not duong_dan_file.exists():
-        duong_dan_file = ROOT_DIR / "data" / "hanh_chinh" / duong_dan_file
+        duong_dan_file = ROOT_DIR / "data" / "hanh_chinh" / "persona_variant" / duong_dan_file
     ten_file_goc = duong_dan_file.stem
 
-    SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "summary" / ten_file_goc
-    EVAL_DIR = ROOT_DIR / "output" / "hanh_chinh" / "eval" / ten_file_goc
+    if args.variant:
+        SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "summary" / args.variant / ten_file_goc
+        EVAL_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "eval" / args.variant / ten_file_goc
+    else:
+        SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "summary" / ten_file_goc
+        EVAL_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "eval" / ten_file_goc
     EVAL_DIR.mkdir(parents=True, exist_ok=True)
 
     if not SUMMARY_DIR.exists():
         raise SystemExit(f"Không tìm thấy thư mục summary cho văn bản này: {SUMMARY_DIR}")
 
-    with open(PROFILE_PATH, encoding="utf-8") as f:
+    ten_file_persona = f"state_profiles_{args.variant}.json" if args.variant else "state_profiles_nt_nn_tc_kn_cd_ch.json"
+    duong_dan_persona = ROOT_DIR / "data" / "profile" / ten_file_persona
+    with open(duong_dan_persona, encoding="utf-8") as f:
         personas = json.load(f)
     persona_index = {p["id"]: p for p in personas}
 
     if args.id:
         personas_can_cham = [args.id]
-    elif args.tu_id:
-        so_tu = int(re.sub(r"\D", "", args.tu_id))
-        so_den = int(re.sub(r"\D", "", args.den_id)) if args.den_id else so_tu
-        personas_can_cham = [
-            p["id"] for p in personas
-            if so_tu <= int(re.sub(r"\D", "", p.get("id", "0"))) <= so_den
-        ]
-        if not personas_can_cham:
-            raise SystemExit(
-                f"Không tìm thấy persona nào trong khoảng {args.tu_id} - {args.den_id or args.tu_id}"
-            )
     else:
         personas_can_cham = [p["id"] for p in personas[:args.so_luong]]
 

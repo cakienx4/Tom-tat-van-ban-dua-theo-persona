@@ -15,7 +15,7 @@ client = genai.Client(api_key=API_KEY)
 
 MODEL_NAME_KHOP_NGANH = "gemini-3.1-flash-lite"
 ROOT_DIR = Path(__file__).resolve().parents[2]
-PROFILE_PATH = ROOT_DIR / "data" / "profile" / "state_profiles.json"
+PROFILE_PATH = ROOT_DIR / "data" / "profile" / "state_profiles_nt_nn_tc_kn_cd_ch.json"
 
 def lay_danh_sach_nganh(duong_dan_profile=PROFILE_PATH):
     with open(duong_dan_profile, "r", encoding="utf-8") as f:
@@ -86,7 +86,7 @@ QUY TẮC BẮT BUỘC (đọc kỹ để phân biệt 2 tình huống khác nha
 
 2. CÂU NÊU TÊN CƠ QUAN/CHỨC DANH CỤ THỂ (vd "Sở Xây dựng", "Sở Quy 
    hoạch - Kiến trúc", "Giám đốc Sở Tài chính"):
-   - Nếu có ngành trong danh sách khớp đúng bản chất: chọn ngành đó.
+   - Nếu có ngành trong danh sách khớp đúng bản chất: chọn ngành đó, do_tin_cay = "cao".
    - Nếu KHÔNG có ngành nào trong danh sách thực sự khớp đúng bản chất 
      (ví dụ "Sở Xây dựng" khi danh sách không có ngành xây dựng): 
      TUYỆT ĐỐI KHÔNG chọn đại ngành gần giống. Trả về nganh_to_khop 
@@ -128,7 +128,7 @@ tình huống:
     "stt": 1,
     "nganh_to_khop": ["nganh 1", "nganh 2", "... liệt kê hết tất cả nganh_to"],
     "nganh_nho_khop": [],
-    "do_tin_cay": "trung binh"
+    "do_tin_cay": "trung bình"
   }},
   {{
     "stt": 2,
@@ -248,7 +248,7 @@ def loc_persona_theo_ket_qua_khop(ket_qua_khop, duong_dan_profile=PROFILE_PATH):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Cách dùng: python -m pipeline.rss.hanhchinh.hanh_chinh_persona_match <đường_dẫn_file_docx>")
+        print("Cách dùng: python -m pipeline.hanhchinh.hanh_chinh_persona_match <đường_dẫn_file_docx>")
         sys.exit(1)
 
     duong_dan = Path(sys.argv[1])
@@ -274,7 +274,8 @@ if __name__ == "__main__":
         print(f"Độ tin cậy: {item['do_tin_cay']}")
         print(f"Số persona khớp: {len(item['danh_sach_persona_id_khop'])}")
 
-    ten_file_json = duong_dan.with_name(f"{duong_dan.stem}_khop_persona.json")
+    ten_file_json = ROOT_DIR / "output" / "hanh_chinh" / "profile_variant" / "persona_match" / f"{duong_dan.stem}.json"
+    ten_file_json.parent.mkdir(parents=True, exist_ok=True)
     with open(ten_file_json, "w", encoding="utf-8") as f:
         json.dump(ket_qua_khop, f, ensure_ascii=False, indent=2)
 

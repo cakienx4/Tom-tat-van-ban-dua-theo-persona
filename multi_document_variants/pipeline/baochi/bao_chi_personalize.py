@@ -14,7 +14,7 @@ MD_ROOT = ROOT_DIR / "multi_document_variants"
 SHARED_ROOT = ROOT_DIR / "shared"
 
 DATA_DIR = MD_ROOT / "data" / "bao_chi"
-OUTPUT_DIR = MD_ROOT / "output" / "bao_chi" / "rss_summary"
+OUTPUT_DIR = MD_ROOT / "output" / "bao_chi" / "profile_variant" / "rss_summary"
 
 from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph, lay_chu_de_hieu_luc
 from pipeline.profiles.ontology_context_state import lay_ontology_context_cho_nganh
@@ -38,7 +38,7 @@ CACHE_BAI_LIEN_QUAN_PATH = (
     OUTPUT_DIR / "lien_quan" / "rss_filter" / "bai_lien_quan_theo_nganh_to.json"
 )
 
-FILTER_DIR = MD_ROOT / "output" / "bao_chi" / "rss_filter"
+FILTER_DIR = MD_ROOT / "output" / "bao_chi" / "profile_variant" / "rss_filter"
 
 GENRE_OVERLAP = _OVERLAP_DATA.get("overlap", {})
 NGUONG_LIEN_QUAN_GIAN_TIEP = _OVERLAP_DATA.get("nguong_lien_quan_gian_tiep", 0.3)

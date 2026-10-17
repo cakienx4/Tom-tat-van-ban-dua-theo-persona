@@ -3,12 +3,19 @@ import json
 import re
 from pathlib import Path
 
-from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME
+from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph
+from pipeline.profiles.ontology_context_state import lay_ontology_context_cho_nganh
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+_ONTOLOGY_PATH = ROOT_DIR / "persona_states.ttl"
+_STATE_GRAPH = load_graph(str(_ONTOLOGY_PATH))
+
 # ==== BƯỚC 1: XÁC ĐỊNH TẦNG ĐỘ SÂU CHO TỪNG MỤC + STYLE TOÀN BÀI ====
 
 TANG_CHUYEN_SAU = 0
 TANG_TRUNG_BINH = 1
 TANG_NEN = 2
+
 
 def _chi_so_da_khop_persona(persona_id, ket_qua_khop_persona):
     ket_qua = {}
@@ -23,7 +30,7 @@ def _chi_so_da_khop_persona(persona_id, ket_qua_khop_persona):
         do_tin_cay = entry.get("do_tin_cay", "thap")
 
         if do_tin_cay == "trung bình" and persona_id in entry.get(
-            "danh_sach_persona_id_khop_ca_nganh_nho", []
+                "danh_sach_persona_id_khop_ca_nganh_nho", []
         ):
             do_tin_cay = "cao"
 
@@ -32,7 +39,6 @@ def _chi_so_da_khop_persona(persona_id, ket_qua_khop_persona):
 
 
 def gan_tang_do_sau_va_style(persona_id, danh_sach_muc, ket_qua_khop_persona):
-
     chi_so_theo_do_tin_cay = _chi_so_da_khop_persona(persona_id, ket_qua_khop_persona)
 
     co_cao = "cao" in chi_so_theo_do_tin_cay.values()
@@ -128,7 +134,6 @@ TANG_NEN_THEO_STYLE = {
     ),
 }
 
-
 # Quy tắc GỘP MỤC NỀN chỉ áp dụng cho style "binh_thuong" (toàn bộ văn bản
 # không liên quan gì tới người đọc). Với "chuyen_sau" và "khong_chuyen_mon",
 # KHÔNG gộp nữa - mỗi mục nền vẫn có đoạn riêng, tóm tắt đầy đủ ý hơn (nhưng
@@ -182,12 +187,21 @@ def _dinh_dang_danh_sach_muc(danh_sach_muc, style):
 
 def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, style):
     loai_van_ban = ket_qua_extract.get("loai_van_ban", "")
+    ontology_ctx = lay_ontology_context_cho_nganh(persona.get("nganh_to", ""))
     danh_sach_muc_text = _dinh_dang_danh_sach_muc(danh_sach_muc_voi_tang, style)
     quy_tac_gop_muc_nen = GOP_MUC_NEN_THEO_STYLE.get(
         style, GOP_MUC_NEN_THEO_STYLE["binh_thuong"]
     )
 
-    prompt = f"""Bạn đang tóm tắt cá nhân hóa 1 văn bản hành chính (loại: {loai_van_ban})
+    ontology_section = ""
+    if ontology_ctx:
+        ontology_section = f"""
+    PHẦN 1: KHUNG PHÂN TÍCH NGÀNH CÔNG VỤ (Ontology Context)
+    {ontology_ctx}
+
+    """
+
+    prompt = f"""{ontology_section}Bạn đang tóm tắt cá nhân hóa 1 văn bản hành chính (loại: {loai_van_ban})
     cho một cán bộ có hồ sơ công vụ sau:
 
     - Ngành/lĩnh vực: {persona.get('nganh_to')} - {persona.get('nganh_nho')}
@@ -261,6 +275,16 @@ def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, st
         đặt trong dấu ngoặc đơn hoặc nối bằng dấu phẩy/cụm từ giải nghĩa tự
         nhiên - miễn là người không có chuyên môn đọc vẫn hiểu được nghĩa mà
         không cần tra cứu thêm.
+      + Ví dụ:
+          Sai: "Sở chủ trì xây dựng đề án sáp nhập các đơn vị sự nghiệp."
+          Đúng: "Sở đứng ra tổ chức chính (chủ trì) xây dựng kế hoạch chi tiết
+          (đề án) để gộp (sáp nhập) các đơn vị sự nghiệp lại với nhau."
+          Sai: "UBND giao Sở Nội vụ thẩm định hồ sơ theo quy trình rút gọn."
+          Đúng: "UBND giao Sở Nội vụ kiểm tra, xét duyệt (thẩm định) hồ sơ theo
+          quy trình đơn giản, nhanh hơn bình thường (quy trình rút gọn)."
+      + Quy tắc này KHÔNG áp dụng cho đoạn thuộc tầng "chuyên sâu", hoặc đoạn
+        tầng "nền" khi style tổng thể là "chuyen_sau" - ở các đoạn đó thuật
+        ngữ chuyên ngành được dùng tự nhiên, không cần giải thích lại.
       + LƯU Ý QUAN TRỌNG: "không có chuyên môn" ở đây là góc nhìn của NGƯỜI
         ĐỌC PHỔ THÔNG, không phải góc nhìn của người soạn văn bản hành chính.
         Rất nhiều từ NGHE có vẻ thông dụng trong văn bản nhà nước (ví dụ:
@@ -274,16 +298,7 @@ def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, st
         chưa từng làm việc trong cơ quan nhà nước đọc câu này, họ có hiểu hết
         từng cụm từ không?" - nếu có bất kỳ cụm nào còn nghi ngờ, PHẢI thêm
         giải thích.
-      + Ví dụ:
-          Sai: "Sở chủ trì xây dựng đề án sáp nhập các đơn vị sự nghiệp."
-          Đúng: "Sở đứng ra tổ chức chính (chủ trì) xây dựng kế hoạch chi tiết
-          (đề án) để gộp (sáp nhập) các đơn vị sự nghiệp lại với nhau."
-          Sai: "UBND giao Sở Nội vụ thẩm định hồ sơ theo quy trình rút gọn."
-          Đúng: "UBND giao Sở Nội vụ kiểm tra, xét duyệt (thẩm định) hồ sơ theo
-          quy trình đơn giản, nhanh hơn bình thường (quy trình rút gọn)."
-      + Quy tắc này KHÔNG áp dụng cho đoạn thuộc tầng "chuyên sâu", hoặc đoạn
-        tầng "nền" khi style tổng thể là "chuyen_sau" - ở các đoạn đó thuật
-        ngữ chuyên ngành được dùng tự nhiên, không cần giải thích lại.
+
     - TÍNH BAO QUÁT:
       + Bản tóm tắt phải phản ánh đầy đủ các nhóm nội dung chính của văn bản.
       + Nếu văn bản gồm nhiều mục thì cần bao quát tất cả các mục quan trọng theo đúng thứ tự.
@@ -328,6 +343,7 @@ def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_person
                 contents=prompt_hien_tai,
                 config={"temperature": 0.0},
             )
+
         return retry_generate(_goi)
 
     response = _call(prompt)
@@ -353,12 +369,13 @@ def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_person
         "danh_sach_muc_voi_tang": danh_sach_muc_luu,
     }
 
+
 if __name__ == "__main__":
     import argparse
     from google import genai
     from pipeline.hanhchinh.hanh_chinh_extract import xu_ly_1_file
     from pipeline.hanhchinh.hanh_chinh_persona_match import (
-        chay_khop_persona_cho_van_ban, PROFILE_PATH, ROOT_DIR,
+        chay_khop_persona_cho_van_ban
     )
 
     API_KEY = os.getenv("API_KEY")
@@ -370,6 +387,12 @@ if __name__ == "__main__":
     group.add_argument("--so-luong", type=int, help="chay tu persona dau tien den persona thu n")
     group.add_argument("--tu-id", help="chạy từ persona này (vd NN0018), dùng kèm --den-id")
     parser.add_argument("--den-id", help="id persona kết thúc, dùng kèm --tu-id (vd NN0026)")
+    parser.add_argument(
+        "--variant",
+        type=str,
+        default=None,
+        help="ten bien the persona, neu co se ghi vao thu muc con rieng de tranh de len du lieu persona day du truong"
+    )
     args = parser.parse_args()
     if args.den_id and not args.tu_id:
         parser.error("--den-id phải đi kèm --tu-id")
@@ -382,9 +405,9 @@ if __name__ == "__main__":
 
     client = genai.Client(api_key=API_KEY)
 
-    EXTRACT_CACHE_DIR = ROOT_DIR / "output" / "hanh_chinh" / "extract"
-    MATCH_CACHE_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_match"
-    SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "summary"
+    EXTRACT_CACHE_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "extract"
+    MATCH_CACHE_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "persona_match"
+    SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "summary"
     for d in (EXTRACT_CACHE_DIR, MATCH_CACHE_DIR, SUMMARY_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
@@ -416,15 +439,17 @@ if __name__ == "__main__":
         with open(match_cache_path, "w", encoding="utf-8") as f:
             json.dump(ket_qua_khop_persona, f, ensure_ascii=False, indent=2)
 
-
     # bước 3: load persona theo id
-    with open(PROFILE_PATH, encoding="utf-8") as f:
+    ten_file_persona = f"state_profiles_{args.variant}.json" if args.variant else "state_profiles_nt_nn_tc_kn_cd_ch.json"
+    duong_dan_persona = ROOT_DIR / "data" / "profile" / ten_file_persona
+    with open(duong_dan_persona, encoding="utf-8") as f:
         personas = json.load(f)
+
     if args.id:
         personas_can_chay = [p for p in personas if p.get("id") == args.id]
         if not personas_can_chay:
             raise SystemExit(
-                f"Không tìm thấy persona có id = {args.id} trong {PROFILE_PATH}"
+                f"Không tìm thấy persona có id = {args.id} trong {duong_dan_persona}"
             )
     elif args.tu_id:
         so_tu = int(re.sub(r"\D", "", args.tu_id))
@@ -440,7 +465,10 @@ if __name__ == "__main__":
     else:
         personas_can_chay = personas[:args.so_luong]
 
-    out_dir = SUMMARY_DIR / ten_file_goc
+    if args.variant:
+        out_dir = SUMMARY_DIR / args.variant / ten_file_goc
+    else:
+        out_dir = SUMMARY_DIR / ten_file_goc
     out_dir.mkdir(parents=True, exist_ok=True)
 
     tong = len(personas_can_chay)
