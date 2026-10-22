@@ -398,15 +398,15 @@ if __name__ == "__main__":
 
     duong_dan_file = Path(args.file)
     if not duong_dan_file.exists():
-        duong_dan_file = ROOT_DIR / "data" / "hanh_chinh" / "persona_variant" / duong_dan_file
+        duong_dan_file = ROOT_DIR / "data" / "hanh_chinh" / "profile_variant" / duong_dan_file
     ten_file_goc = duong_dan_file.stem
 
     if args.variant:
-        SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "summary" / args.variant / ten_file_goc
-        EVAL_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "eval" / args.variant / ten_file_goc
+        SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "profile_variant" / "summary" / args.variant / ten_file_goc
+        EVAL_DIR = ROOT_DIR / "output" / "hanh_chinh" / "profile_variant" / "eval" / args.variant / ten_file_goc
     else:
-        SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "summary" / ten_file_goc
-        EVAL_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "eval" / ten_file_goc
+        SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "profile_variant" / "summary" / ten_file_goc
+        EVAL_DIR = ROOT_DIR / "output" / "hanh_chinh" / "profile_variant" / "eval" / ten_file_goc
     EVAL_DIR.mkdir(parents=True, exist_ok=True)
 
     if not SUMMARY_DIR.exists():

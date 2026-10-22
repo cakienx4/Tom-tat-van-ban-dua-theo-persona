@@ -1,10 +1,12 @@
 import re
 import time
+import asyncio
 from rdflib import Graph, Namespace
 from pathlib import Path
 
 MAX_RETRY_ATTEMPTS = 5
 SUMMARY_MODEL_NAME = "gemini-3.1-flash-lite"
+GEMINI_MAX_CONCURRENCY = 3
 
 NGANH_TO_SANG_GENRE = {
     "Công chức hành chính nhà nước": ["Chính trị / Pháp luật", "Thời sự / Xã hội"],
@@ -59,6 +61,38 @@ def retry_generate(func, *args, **kwargs):
                 continue
 
             raise
+
+async def retry_generate_async(func, *args, **kwargs):
+    """Bản async của retry_generate. func phải là coroutine function (async def)."""
+    attempt = 0
+    while True:
+        try:
+            return await func(*args, **kwargs)
+
+        except Exception as e:
+            msg = str(e)
+            attempt += 1
+
+            if attempt > MAX_RETRY_ATTEMPTS:
+                raise RuntimeError(
+                    f"Gemini vẫn lỗi sau {MAX_RETRY_ATTEMPTS} lần retry: {msg}"
+                ) from e
+
+            if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
+                match = re.search(r"retry in ([0-9.]+)s", msg, re.IGNORECASE)
+                wait = float(match.group(1)) + 2 if match else 40
+                print(f"\n429 quota. Đợi {wait:.1f}s... (lần {attempt}/{MAX_RETRY_ATTEMPTS})")
+                await asyncio.sleep(wait)
+                continue
+
+            elif "503" in msg or "UNAVAILABLE" in msg:
+                wait = 20
+                print(f"\nServer bận. Đợi {wait}s... (lần {attempt}/{MAX_RETRY_ATTEMPTS})")
+                await asyncio.sleep(wait)
+                continue
+
+            raise
+
 
 def load_graph(ttl_path: str) -> Graph:
     g = Graph()

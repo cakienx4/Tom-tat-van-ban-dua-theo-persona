@@ -2,12 +2,13 @@ import json
 import os
 import time
 import re
+import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME
+from pipeline.utils import retry_generate_async, SUMMARY_MODEL_NAME, GEMINI_MAX_CONCURRENCY
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 MD_ROOT = ROOT_DIR / "multi_document_variants"
@@ -334,8 +335,8 @@ bo_cuc_uu_tien, giong_dieu_phu_hop, thai_do_dung_dan), mỗi khóa là MỘT OBJ
     return prompt
 
 
-def cham_1_persona(persona: dict, ket_qua_rss: dict, index_theo_link: dict, index_theo_title: dict, client,
-                    model_name: str = SUMMARY_MODEL_NAME) -> dict:
+async def cham_1_persona(persona: dict, ket_qua_rss: dict, index_theo_link: dict, index_theo_title: dict, client,
+                          semaphore, model_name: str = SUMMARY_MODEL_NAME) -> dict:
     summary = ket_qua_rss.get("summary", "")
     if not summary:
         return {
@@ -360,8 +361,8 @@ def cham_1_persona(persona: dict, ket_qua_rss: dict, index_theo_link: dict, inde
     }
     prompt = build_judge_prompt(persona, nguon_chinh, nguon_gian_tiep, nguon_bai, summary, thong_ke)
 
-    def _call():
-        return client.models.generate_content(
+    async def _call():
+        return await client.aio.models.generate_content(
             model=model_name,
             contents=prompt,
             config={
@@ -370,7 +371,8 @@ def cham_1_persona(persona: dict, ket_qua_rss: dict, index_theo_link: dict, inde
             },
         )
 
-    response = retry_generate(_call)
+    async with semaphore:
+        response = await retry_generate_async(_call)
 
     raw = response.text.strip()
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -421,6 +423,8 @@ def cham_1_persona(persona: dict, ket_qua_rss: dict, index_theo_link: dict, inde
         ket_qua_cham["hau_kiem_canh_bao"] = hau_kiem["chi_tiet_canh_bao"]
 
     return ket_qua_cham
+
+
 def in_ket_qua_cham(persona_id: str, cham: dict) -> None:
     """In nhanh kết quả chấm ra console, kèm tên tiêu chí fail nếu có, để
     dễ quan sát khi chạy hàng loạt mà không cần mở từng file json."""
@@ -443,7 +447,7 @@ if __name__ == "__main__":
     API_KEY = os.getenv("GEMINI_API_KEY_2")
 
     parser = argparse.ArgumentParser(description="Đánh giá bản tóm tắt RSS bằng LLM Judge (Gemini)")
-    parser.add_argument("--id", type=str, help="id của persona, ví dụ NN0001")
+    parser.add_argument("--id", type=str, help="id của persona, ví dụ NN001")
     parser.add_argument("-n", "--so-luong", type=int, help="Chỉ đánh giá N kết quả đầu tiên")
     parser.add_argument("--variant", type=str, default=None, help="ten bien the persona")
     args = parser.parse_args()
@@ -456,71 +460,88 @@ if __name__ == "__main__":
     personas = load_personas(args.variant)
     persona_index = {p["id"]: p for p in personas}
     index_theo_link, index_theo_title = load_articles_index()
-    client = genai.Client(api_key=API_KEY)
 
     EVAL_DIR.mkdir(parents=True, exist_ok=True)
 
-    if args.id:
-        json_path = JSON_DIR / f"{args.id}.json"
-        if not json_path.exists():
-            raise SystemExit(f"Không tìm thấy kết quả rss_personalize cho id = {args.id}")
-        with open(json_path, encoding="utf-8") as f:
-            ket_qua_rss = json.load(f)
-        persona = persona_index.get(args.id)
+
+    async def cham_va_ghi(persona_id, client, semaphore, bo_qua_neu_da_cham=True):
+        """Chấm 1 persona rồi ghi file eval. Trả về None nếu bỏ qua, {'verdict_cuoi': 'LOI'} nếu gọi
+        Gemini lỗi (không ghi file, để lần sau chạy lại), còn lại trả về dict kết quả chấm."""
+        out_path = EVAL_DIR / f"{persona_id}.json"
+        if bo_qua_neu_da_cham and out_path.exists():
+            print(f"[{persona_id}] đã chấm rồi, bỏ qua.")
+            return None
+
+        persona = persona_index.get(persona_id)
         if persona is None:
-            raise SystemExit(f"Không tìm thấy persona có id = {args.id}")
+            print(f"[{persona_id}] không tìm thấy persona tương ứng, bỏ qua.")
+            return None
 
-        print(f"[{args.id}] đang chấm...")
-        cham = cham_1_persona(persona, ket_qua_rss, index_theo_link, index_theo_title, client)
+        with open(JSON_DIR / f"{persona_id}.json", encoding="utf-8") as f:
+            ket_qua_rss = json.load(f)
 
-        out_path = EVAL_DIR / f"{args.id}.json"
+        print(f"[{persona_id}] đang chấm...")
+        try:
+            cham = await cham_1_persona(persona, ket_qua_rss, index_theo_link, index_theo_title, client, semaphore)
+        except Exception as e:
+            print(f"[{persona_id}] LỖI, bỏ qua persona này: {e}")
+            return {"verdict_cuoi": "LOI"}
+
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(cham, f, ensure_ascii=False, indent=2)
-        in_ket_qua_cham(args.id, cham)
-        if cham.get("can_soat_tay"):
-            print(f" [{args.id}] có {len(cham['hau_kiem_canh_bao'])} cảnh báo hậu kiểm - cần soát tay:")
-            for cb in cham["hau_kiem_canh_bao"]:
-                print(f"      - {cb}")
-    else:
-        danh_sach_file = sorted(JSON_DIR.glob("*.json"))
-        if args.so_luong:
-            danh_sach_file = danh_sach_file[:args.so_luong]
-
-        print("Tổng số kết quả cần chấm:", len(danh_sach_file))
-        t_bat_dau = time.time()
-        thong_ke_dat = 0
-        thong_ke_khong_dat = 0
-        thong_ke_bo_qua = 0
-
-        for json_path in danh_sach_file:
-            persona_id = json_path.stem
-            out_path = EVAL_DIR / f"{persona_id}.json"
-            if out_path.exists():
-                print(f"[{persona_id}] đã chấm rồi, bỏ qua.")
-                continue
-
-            persona = persona_index.get(persona_id)
-            if persona is None:
-                print(f"[{persona_id}] không tìm thấy persona tương ứng, bỏ qua.")
-                continue
-
-            with open(json_path, encoding="utf-8") as f:
-                ket_qua_rss = json.load(f)
-            time.sleep(10)
-            print(f"[{persona_id}] đang chấm...")
-            cham = cham_1_persona(persona, ket_qua_rss, index_theo_link, index_theo_title, client)
-            with open(out_path, "w", encoding="utf-8") as f:
-                json.dump(cham, f, ensure_ascii=False, indent=2)
-            in_ket_qua_cham(persona_id, cham)
-            if cham.get("verdict_cuoi") == "DAT":
-                thong_ke_dat += 1
-            elif cham.get("verdict_cuoi") == "KHONG_DAT":
-                thong_ke_khong_dat += 1
-            else:
-                thong_ke_bo_qua += 1
+        in_ket_qua_cham(persona_id, cham)
+        return cham
 
 
-        print("\nXONG HẾT. Tổng thời gian:", round((time.time() - t_bat_dau) / 60, 1), "phút")
-        print(f"ĐẠT cả 6 tiêu chí: {thong_ke_dat}")
-        print(f"KHÔNG ĐẠT (thiếu ít nhất 1 tiêu chí): {thong_ke_khong_dat}")
-        print(f"Bỏ qua (rỗng/lỗi/không có persona): {thong_ke_bo_qua}")
+    async def chay():
+        client = genai.Client(api_key=API_KEY)
+        semaphore = asyncio.Semaphore(GEMINI_MAX_CONCURRENCY)
+
+        if args.id:
+            json_path = JSON_DIR / f"{args.id}.json"
+            if not json_path.exists():
+                raise SystemExit(f"Không tìm thấy kết quả rss_personalize cho id = {args.id}")
+            if args.id not in persona_index:
+                raise SystemExit(f"Không tìm thấy persona có id = {args.id}")
+
+            cham = await cham_va_ghi(args.id, client, semaphore, bo_qua_neu_da_cham=False)
+            if cham and cham.get("can_soat_tay"):
+                print(f" [{args.id}] có {len(cham['hau_kiem_canh_bao'])} cảnh báo hậu kiểm - cần soát tay:")
+                for cb in cham["hau_kiem_canh_bao"]:
+                    print(f"      - {cb}")
+        else:
+            danh_sach_file = sorted(JSON_DIR.glob("*.json"))
+            if args.so_luong:
+                danh_sach_file = danh_sach_file[:args.so_luong]
+
+            print("Tổng số kết quả cần chấm:", len(danh_sach_file))
+            t_bat_dau = time.time()
+
+            ket_qua_tat_ca = await asyncio.gather(
+                *[cham_va_ghi(json_path.stem, client, semaphore) for json_path in danh_sach_file]
+            )
+
+            thong_ke_dat = 0
+            thong_ke_khong_dat = 0
+            thong_ke_bo_qua = 0
+            thong_ke_loi = 0
+            for cham in ket_qua_tat_ca:
+                if cham is None:
+                    continue
+                verdict = cham.get("verdict_cuoi")
+                if verdict == "DAT":
+                    thong_ke_dat += 1
+                elif verdict == "KHONG_DAT":
+                    thong_ke_khong_dat += 1
+                elif verdict == "LOI":
+                    thong_ke_loi += 1
+                else:
+                    thong_ke_bo_qua += 1
+
+            print("\nXONG HẾT. Tổng thời gian:", round((time.time() - t_bat_dau) / 60, 1), "phút")
+            print(f"ĐẠT cả 6 tiêu chí: {thong_ke_dat}")
+            print(f"KHÔNG ĐẠT (thiếu ít nhất 1 tiêu chí): {thong_ke_khong_dat}")
+            print(f"Bỏ qua (rỗng/lỗi/không có persona): {thong_ke_bo_qua}")
+            print(f"Lỗi gọi Gemini (chưa ghi file, chạy lại để chấm tiếp): {thong_ke_loi}")
+
+    asyncio.run(chay())

@@ -405,9 +405,9 @@ if __name__ == "__main__":
 
     client = genai.Client(api_key=API_KEY)
 
-    EXTRACT_CACHE_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "extract"
-    MATCH_CACHE_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "persona_match"
-    SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "persona_variant" / "summary"
+    EXTRACT_CACHE_DIR = ROOT_DIR / "output" / "hanh_chinh" / "profile_variant" / "extract"
+    MATCH_CACHE_DIR = ROOT_DIR / "output" / "hanh_chinh" / "profile_variant" / "persona_match"
+    SUMMARY_DIR = ROOT_DIR / "output" / "hanh_chinh" / "profile_variant" / "summary"
     for d in (EXTRACT_CACHE_DIR, MATCH_CACHE_DIR, SUMMARY_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
