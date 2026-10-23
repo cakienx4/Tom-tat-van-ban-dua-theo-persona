@@ -2,13 +2,14 @@ import json
 import os
 import re
 import time
+import asyncio
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME
+from pipeline.utils import retry_generate_async, SUMMARY_MODEL_NAME, GEMINI_MAX_CONCURRENCY
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
@@ -267,7 +268,7 @@ thêm ngoài JSON:
 
 # ==== BƯỚC 5: GỌI LLM CHẤM + HẬU KIỂM ====
 
-def cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, model_name=SUMMARY_MODEL_NAME):
+async def cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, semaphore, model_name=SUMMARY_MODEL_NAME):
     danh_sach_muc_goc = ket_qua_tom_tat.get("danh_sach_muc_voi_tang", [])
     danh_sach_muc_loc = loc_muc_hop_le(danh_sach_muc_goc)
 
@@ -301,8 +302,8 @@ def cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, model_name=SUMMARY_MODE
 
     prompt = build_judge_prompt(persona, ket_qua_tom_tat, danh_sach_muc_loc)
 
-    def _call():
-        return client.models.generate_content(
+    async def _call():
+        return await client.aio.models.generate_content(
             model=model_name,
             contents=prompt,
             config={
@@ -311,7 +312,8 @@ def cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, model_name=SUMMARY_MODE
             },
         )
 
-    response = retry_generate(_call)
+    async with semaphore:
+        response = await retry_generate_async(_call)
 
     raw = response.text.strip()
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -423,50 +425,59 @@ if __name__ == "__main__":
     else:
         personas_can_cham = [p["id"] for p in personas[:args.so_luong]]
 
-    client = genai.Client(api_key=API_KEY)
-
     tong = len(personas_can_cham)
-    t_bat_dau = time.time()
-    thong_ke_dat = 0
-    thong_ke_khong_dat = 0
-    thong_ke_bo_qua = 0
 
-    for i, persona_id in enumerate(personas_can_cham, start=1):
+
+    async def cham_va_ghi(i, persona_id, client, semaphore):
+        """Trả về 'dat' / 'khong_dat' / 'bo_qua' / 'loi', hoặc None nếu đã chấm rồi (không tính thống kê)."""
         out_path = EVAL_DIR / f"{persona_id}.json"
         if out_path.exists():
             print(f"[{i}/{tong}] {persona_id} đã chấm rồi -> bỏ qua")
-            continue
+            return None
 
         summary_path = SUMMARY_DIR / f"{persona_id}.json"
         if not summary_path.exists():
             print(f"[{i}/{tong}] {persona_id} chưa có file summary -> bỏ qua")
-            thong_ke_bo_qua += 1
-            continue
+            return "bo_qua"
 
         persona = persona_index.get(persona_id)
         if persona is None:
             print(f"[{i}/{tong}] {persona_id} không tìm thấy trong profile -> bỏ qua")
-            thong_ke_bo_qua += 1
-            continue
+            return "bo_qua"
 
         with open(summary_path, encoding="utf-8") as f:
             ket_qua_tom_tat = json.load(f)
 
         print(f"[{i}/{tong}] {persona_id} đang chấm...")
-        cham = cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client)
+        try:
+            cham = await cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, semaphore)
+        except Exception as e:
+            print(f"[{persona_id}] LỖI gọi Gemini, bỏ qua persona này (chưa ghi file, chạy lại để chấm tiếp): {e}")
+            return "loi"
 
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(cham, f, ensure_ascii=False, indent=2)
 
         in_ket_qua_cham(persona_id, cham)
         if cham.get("verdict_cuoi") == "DAT":
-            thong_ke_dat += 1
+            return "dat"
         elif cham.get("verdict_cuoi") == "KHONG_DAT":
-            thong_ke_khong_dat += 1
-        else:
-            thong_ke_bo_qua += 1
+            return "khong_dat"
+        return "bo_qua"
+
+
+    async def chay():
+        client = genai.Client(api_key=API_KEY)
+        semaphore = asyncio.Semaphore(GEMINI_MAX_CONCURRENCY)
+        return await asyncio.gather(
+            *[cham_va_ghi(i, pid, client, semaphore) for i, pid in enumerate(personas_can_cham, start=1)]
+        )
+
+    t_bat_dau = time.time()
+    ket_qua_tat_ca = asyncio.run(chay())
 
     print("\nXONG HẾT. Tổng thời gian:", round((time.time() - t_bat_dau) / 60, 1), "phút")
-    print(f"ĐẠT cả 6 tiêu chí: {thong_ke_dat}")
-    print(f"KHÔNG ĐẠT: {thong_ke_khong_dat}")
-    print(f"Bỏ qua: {thong_ke_bo_qua}")
+    print(f"ĐẠT cả 6 tiêu chí: {ket_qua_tat_ca.count('dat')}")
+    print(f"KHÔNG ĐẠT: {ket_qua_tat_ca.count('khong_dat')}")
+    print(f"Bỏ qua: {ket_qua_tat_ca.count('bo_qua')}")
+    print(f"Lỗi gọi Gemini (chưa ghi file, chạy lại để chấm tiếp): {ket_qua_tat_ca.count('loi')}")

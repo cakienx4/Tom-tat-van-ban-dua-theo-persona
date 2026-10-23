@@ -1,9 +1,10 @@
 import os
 import json
 import re
+import asyncio
 from pathlib import Path
 
-from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph
+from pipeline.utils import retry_generate_async, SUMMARY_MODEL_NAME, load_graph, GEMINI_MAX_CONCURRENCY
 from pipeline.profiles.ontology_context_state import lay_ontology_context_cho_nganh
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -323,8 +324,8 @@ def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, st
 
 # ==== BƯỚC 4: HÀM CHẠY CHÍNH CHO 1 PERSONA ====
 
-def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_persona, client,
-                                   model_name=SUMMARY_MODEL_NAME):
+async def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_persona, client, semaphore,
+                                         model_name=SUMMARY_MODEL_NAME):
     danh_sach_muc = ket_qua_extract.get("danh_sach_muc", [])
 
     danh_sach_muc_voi_tang, style = gan_tang_do_sau_va_style(
@@ -336,17 +337,18 @@ def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_person
 
     prompt = build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, style)
 
-    def _call(prompt_hien_tai):
-        def _goi():
-            return client.models.generate_content(
+    async def _call(prompt_hien_tai):
+        async def _goi():
+            return await client.aio.models.generate_content(
                 model=model_name,
                 contents=prompt_hien_tai,
                 config={"temperature": 0.0},
             )
 
-        return retry_generate(_goi)
+        async with semaphore:
+            return await retry_generate_async(_goi)
 
-    response = _call(prompt)
+    response = await _call(prompt)
     summary = response.text.strip()
 
     danh_sach_muc_luu = [
@@ -473,24 +475,29 @@ if __name__ == "__main__":
 
     tong = len(personas_can_chay)
 
-    for i, persona in enumerate(personas_can_chay, start=1):
 
+    async def xu_ly_mot_persona(i, persona, semaphore):
         out_path_json = out_dir / f"{persona['id']}.json"
         out_path_md = out_dir / f"{persona['id']}.md"
 
         # đã chạy rồi thì bỏ qua
         if out_path_json.exists():
             print(f"[{i}/{tong}] {persona['id']} đã tồn tại -> bỏ qua")
-            continue
+            return
 
         print(f"\n[{i}/{tong}] Bắt đầu xử lý {persona['id']}...")
 
-        ket_qua = tom_tat_hanh_chinh_cho_persona(
-            persona,
-            ket_qua_extract,
-            ket_qua_khop_persona,
-            client,
-        )
+        try:
+            ket_qua = await tom_tat_hanh_chinh_cho_persona(
+                persona,
+                ket_qua_extract,
+                ket_qua_khop_persona,
+                client,
+                semaphore,
+            )
+        except Exception as e:
+            print(f"[{persona['id']}] LỖI, bỏ qua persona này: {e}")
+            return
 
         with open(out_path_json, "w", encoding="utf-8") as f:
             json.dump(ket_qua, f, ensure_ascii=False, indent=2)
@@ -498,9 +505,18 @@ if __name__ == "__main__":
         with open(out_path_md, "w", encoding="utf-8") as f:
             f.write(ket_qua["summary"])
 
-        print(f"Style: {ket_qua['style']}")
+        print(f"[{persona['id']}] Style: {ket_qua['style']}")
         print(
-            f"Chuyên sâu: {ket_qua['so_muc_chuyen_sau']}, "
+            f"[{persona['id']}] Chuyên sâu: {ket_qua['so_muc_chuyen_sau']}, "
             f"TB: {ket_qua['so_muc_trung_binh']}"
         )
-        print(f"Đã ghi: {out_path_json}")
+        print(f"[{persona['id']}] Đã ghi: {out_path_json}")
+
+
+    async def chay():
+        semaphore = asyncio.Semaphore(GEMINI_MAX_CONCURRENCY)
+        await asyncio.gather(
+            *[xu_ly_mot_persona(i, p, semaphore) for i, p in enumerate(personas_can_chay, start=1)]
+        )
+
+    asyncio.run(chay())

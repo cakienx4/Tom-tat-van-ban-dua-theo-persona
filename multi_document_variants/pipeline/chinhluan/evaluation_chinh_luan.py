@@ -13,12 +13,13 @@ Khung đánh giá gồm 7 tiêu chí:
 import os
 import json
 import argparse
+import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME
+from pipeline.utils import retry_generate_async, SUMMARY_MODEL_NAME, GEMINI_MAX_CONCURRENCY
 from pipeline.chinhluan.chinh_luan_personalize import _dinh_dang_danh_sach_luan_diem
 from google import genai
 
@@ -129,11 +130,12 @@ def build_prompt_danh_gia(bai: dict, ket_qua_ca_nhan_hoa: dict) -> str:
     ).strip()
 
 
-def goi_llm_danh_gia(client, bai: dict, ket_qua_ca_nhan_hoa: dict, model: str = SUMMARY_MODEL_NAME) -> dict:
+async def goi_llm_danh_gia(client, bai: dict, ket_qua_ca_nhan_hoa: dict, semaphore,
+                           model: str = SUMMARY_MODEL_NAME) -> dict:
     prompt = build_prompt_danh_gia(bai, ket_qua_ca_nhan_hoa)
 
-    def _call():
-        return client.models.generate_content(
+    async def _call():
+        return await client.aio.models.generate_content(
             model=model,
             contents=prompt,
             config={
@@ -142,7 +144,8 @@ def goi_llm_danh_gia(client, bai: dict, ket_qua_ca_nhan_hoa: dict, model: str = 
             },
         )
 
-    response = retry_generate(_call)
+    async with semaphore:
+        response = await retry_generate_async(_call)
     raw = response.text.strip()
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
 
@@ -200,8 +203,8 @@ def tinh_ket_qua_chung(danh_gia: dict) -> bool:
 
 # ==== CLI ====
 
-def chay_danh_gia(bai_id: str, persona_id: str, duong_dan_bai: str, duong_dan_summary: str,
-                   duong_dan_output: str, model: str = SUMMARY_MODEL_NAME):
+async def chay_danh_gia(bai_id: str, persona_id: str, duong_dan_bai: str, duong_dan_summary: str,
+                        duong_dan_output: str, client, semaphore, model: str = SUMMARY_MODEL_NAME):
     duong_dan_bai_dir = ROOT_DIR / duong_dan_bai if not Path(duong_dan_bai).is_absolute() else Path(duong_dan_bai)
     duong_dan_bai_file = duong_dan_bai_dir / f"{bai_id}.json"
     if not duong_dan_bai_file.exists():
@@ -218,10 +221,7 @@ def chay_danh_gia(bai_id: str, persona_id: str, duong_dan_bai: str, duong_dan_su
     if ket_qua_ca_nhan_hoa.get("loi"):
         raise SystemExit(f"Bản tóm tắt {duong_dan_summary_file} bị lỗi từ bước personalize: {ket_qua_ca_nhan_hoa['loi']}")
 
-    API_KEY = os.getenv("API_KEY")
-    client = genai.Client(api_key=API_KEY)
-
-    danh_gia = goi_llm_danh_gia(client, bai, ket_qua_ca_nhan_hoa, model=model)
+    danh_gia = await goi_llm_danh_gia(client, bai, ket_qua_ca_nhan_hoa, semaphore, model=model)
 
     so_luan_diem_goc = len(bai.get("phan_tich_lap_luan", {}).get("danh_sach_luan_diem", []))
     ly_do_can_soat_tay = hau_kiem(danh_gia, ket_qua_ca_nhan_hoa, so_luan_diem_goc)
@@ -254,9 +254,9 @@ def chay_danh_gia(bai_id: str, persona_id: str, duong_dan_bai: str, duong_dan_su
         print(f"  {trang_thai} Tiêu chí {i}: {TEN_TIEU_CHI[i]}")
     print(f"Đã ghi: {out_file}")
 
-def chay_danh_gia_toan_bo_bai(bai_id: str, duong_dan_bai: str, duong_dan_summary: str,
-                               duong_dan_output: str, model: str = SUMMARY_MODEL_NAME,
-                               bo_qua_da_co: bool = True):
+async def chay_danh_gia_toan_bo_bai(bai_id: str, duong_dan_bai: str, duong_dan_summary: str,
+                                    duong_dan_output: str, client, semaphore,
+                                    model: str = SUMMARY_MODEL_NAME, bo_qua_da_co: bool = True):
     """
     Quet toan bo file <persona_id>.json da co san trong summary/<bai_id>/, chay
     danh gia cho tung persona. Bo qua persona da co ket qua danh gia truoc do
@@ -275,20 +275,28 @@ def chay_danh_gia_toan_bo_bai(bai_id: str, duong_dan_bai: str, duong_dan_summary
     duong_dan_out_dir.mkdir(parents=True, exist_ok=True)
 
     tong = len(file_summary_list)
-    for i, file_summary in enumerate(file_summary_list, start=1):
+
+    async def danh_gia_mot_persona(i, file_summary):
         persona_id = file_summary.stem
         out_file = duong_dan_out_dir / f"{persona_id}.json"
 
         if bo_qua_da_co and out_file.exists():
             print(f"[{i}/{tong}] {persona_id} đã có kết quả đánh giá -> bỏ qua")
-            continue
+            return
 
         print(f"\n[{i}/{tong}] Đang đánh giá persona {persona_id}...")
         try:
-            chay_danh_gia(bai_id, persona_id, duong_dan_bai, duong_dan_summary, duong_dan_output, model)
+            await chay_danh_gia(bai_id, persona_id, duong_dan_bai, duong_dan_summary, duong_dan_output,
+                                client, semaphore, model)
         except SystemExit as loi:
             print(f"Bỏ qua {persona_id} do lỗi: {loi}")
-            continue
+        except Exception as loi:
+            print(f"Bỏ qua {persona_id} do lỗi gọi Gemini: {loi}")
+
+    await asyncio.gather(
+        *[danh_gia_mot_persona(i, f) for i, f in enumerate(file_summary_list, start=1)]
+    )
+
 
 def main():
     parser = argparse.ArgumentParser(description="Đánh giá bản tóm tắt cá nhân hóa chính luận theo 7 tiêu chí")
@@ -308,18 +316,24 @@ def main():
         args.summary_input = f"{args.summary_input}/{args.variant}"
         args.output_dir = f"{args.output_dir}/{args.variant}"
 
-    if args.id:
-        chay_danh_gia(
-            args.bai_id, args.id,
-            args.bai_input, args.summary_input, args.output_dir,
-            args.model,
-        )
-    else:
-        chay_danh_gia_toan_bo_bai(
-            args.bai_id,
-            args.bai_input, args.summary_input, args.output_dir,
-            args.model,
-        )
+    async def chay():
+        client = genai.Client(api_key=os.getenv("API_KEY"))
+        semaphore = asyncio.Semaphore(GEMINI_MAX_CONCURRENCY)
+
+        if args.id:
+            await chay_danh_gia(
+                args.bai_id, args.id,
+                args.bai_input, args.summary_input, args.output_dir,
+                client, semaphore, args.model,
+            )
+        else:
+            await chay_danh_gia_toan_bo_bai(
+                args.bai_id,
+                args.bai_input, args.summary_input, args.output_dir,
+                client, semaphore, args.model,
+            )
+
+    asyncio.run(chay())
 
 
 if __name__ == "__main__":

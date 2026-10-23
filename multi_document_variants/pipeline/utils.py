@@ -1,12 +1,27 @@
 import re
 import time
 import asyncio
-from rdflib import Graph, Namespace
 from pathlib import Path
+from types import SimpleNamespace
+
+from rdflib import Graph, Namespace
+
+# Lưu ý: httpx và openai chỉ được import bên trong hàm tao_oss_raw_client_async()
+# (import trễ) để máy chỉ chạy Gemini mà không cài openai/httpx vẫn import được file này.
 
 MAX_RETRY_ATTEMPTS = 5
+
+# ===== Gemini =====
 SUMMARY_MODEL_NAME = "gemini-3.1-flash-lite"
 GEMINI_MAX_CONCURRENCY = 3
+
+# ===== gpt-oss-120b (RunAI) =====
+OSS_MAX_CONCURRENCY = 200
+OSS_MAX_CONCURRENCY_SUMMARY = 15
+
+OSS_HOST = "https://text-sum-gpt-oss-120b-runai-text-sum.runai-inference.cyberspace.vn"
+OSS_MODEL_NAME = "gpt-oss-120b"
+OSS_MAX_OUTPUT_TOKENS_TRAN = 16384
 
 NGANH_TO_SANG_GENRE = {
     "Công chức hành chính nhà nước": ["Chính trị / Pháp luật", "Thời sự / Xã hội"],
@@ -32,7 +47,18 @@ def lay_chu_de_hieu_luc(persona: dict) -> list:
         return NGANH_TO_SANG_GENRE[nganh_to]
     return ["Thời sự / Xã hội"]
 
+
+def load_graph(ttl_path: str) -> Graph:
+    g = Graph()
+    ttl_path = Path(ttl_path).resolve().as_uri()
+    g.parse(ttl_path, format='turtle')
+    return g
+
+
+# ===== Retry (dùng chung cho Gemini và OSS) =====
+
 def retry_generate(func, *args, **kwargs):
+    """Bản sync (dùng cho các module Gemini chưa chuyển sang async)."""
     attempt = 0
     while True:
         try:
@@ -44,7 +70,7 @@ def retry_generate(func, *args, **kwargs):
 
             if attempt > MAX_RETRY_ATTEMPTS:
                 raise RuntimeError(
-                    f"Gemini vẫn lỗi sau {MAX_RETRY_ATTEMPTS} lần retry: {msg}"
+                    f"Model vẫn lỗi sau {MAX_RETRY_ATTEMPTS} lần retry: {msg}"
                 ) from e
 
             if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
@@ -62,8 +88,9 @@ def retry_generate(func, *args, **kwargs):
 
             raise
 
+
 async def retry_generate_async(func, *args, **kwargs):
-    """Bản async của retry_generate. func phải là coroutine function (async def)."""
+    """Bản async. func phải là coroutine function (async def). Dùng cho cả Gemini và OSS."""
     attempt = 0
     while True:
         try:
@@ -75,7 +102,7 @@ async def retry_generate_async(func, *args, **kwargs):
 
             if attempt > MAX_RETRY_ATTEMPTS:
                 raise RuntimeError(
-                    f"Gemini vẫn lỗi sau {MAX_RETRY_ATTEMPTS} lần retry: {msg}"
+                    f"Model vẫn lỗi sau {MAX_RETRY_ATTEMPTS} lần retry: {msg}"
                 ) from e
 
             if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
@@ -91,11 +118,59 @@ async def retry_generate_async(func, *args, **kwargs):
                 await asyncio.sleep(wait)
                 continue
 
+            elif "timeout" in msg.lower() or "InternalServerError" in msg or "500" in msg:
+                wait = 30
+                print(f"\nServer timeout/lỗi 500. Đợi {wait}s... (lần {attempt}/{MAX_RETRY_ATTEMPTS})")
+                await asyncio.sleep(wait)
+                continue
+
             raise
 
 
-def load_graph(ttl_path: str) -> Graph:
-    g = Graph()
-    ttl_path = Path(ttl_path).resolve().as_uri()
-    g.parse(ttl_path, format='turtle')
-    return g
+# ===== gpt-oss-120b client =====
+
+def tao_oss_raw_client_async():
+    import httpx
+    from openai import AsyncOpenAI
+
+    return AsyncOpenAI(
+        api_key="EMPTY",
+        base_url=f"{OSS_HOST}/v1",
+        http_client=httpx.AsyncClient(
+            verify=False,
+            timeout=httpx.Timeout(connect=10.0, read=900.0, write=60.0, pool=10.0),
+        ),
+        max_retries=0,
+    )
+
+
+async def oss_generate_content_async(raw_client, model=OSS_MODEL_NAME, contents="", config=None):
+    config = config or {}
+    temperature = config.get("temperature", 0.0)
+    max_tokens = min(
+        config.get("max_output_tokens", OSS_MAX_OUTPUT_TOKENS_TRAN),
+        OSS_MAX_OUTPUT_TOKENS_TRAN,
+    )
+    response = await raw_client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": contents}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+        extra_body={"reasoning_effort": "low"},
+    )
+    raw = response.choices[0].message.content
+    finish_reason = response.choices[0].finish_reason
+    return SimpleNamespace(text=raw.strip() if raw else "", finish_reason=finish_reason)
+
+
+def tao_oss_client_async():
+    raw_client = tao_oss_raw_client_async()
+    models_gia_lap = SimpleNamespace(
+        generate_content=lambda model=None, contents="", config=None:
+            oss_generate_content_async(raw_client, model, contents, config)
+    )
+    return SimpleNamespace(models=models_gia_lap)
+
+
+def uoc_luong_so_token(text: str) -> int:
+    return len(text) // 3

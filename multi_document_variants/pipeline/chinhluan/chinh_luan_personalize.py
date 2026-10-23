@@ -2,6 +2,7 @@ import os
 import re
 import json
 import argparse
+import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -9,7 +10,7 @@ load_dotenv()
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
-from pipeline.utils import retry_generate, SUMMARY_MODEL_NAME, load_graph
+from pipeline.utils import retry_generate_async, SUMMARY_MODEL_NAME, load_graph, GEMINI_MAX_CONCURRENCY
 from pipeline.profiles.ontology_context_state import lay_ontology_context_cho_nganh
 from pipeline.baochi.bao_chi_personalize import (
     classify_genre_rss,
@@ -393,8 +394,8 @@ def _lay_van_ban_cham_genre_chinh_luan(bai: dict) -> str:
     noi_dung_sach = _RE_TIEN_TO_DOAN.sub("", noi_dung)
     return f"{bai.get('title', '')} {noi_dung_sach}"
 
-def tom_tat_chinh_luan_cho_persona(persona: dict, bai: dict, client,
-                                    model_name: str = SUMMARY_MODEL_NAME) -> dict:
+async def tom_tat_chinh_luan_cho_persona(persona: dict, bai: dict, client, semaphore,
+                                          model_name: str = SUMMARY_MODEL_NAME) -> dict:
     phan_tich = bai.get("phan_tich_lap_luan", {})
     danh_sach_luan_diem = phan_tich.get("danh_sach_luan_diem", [])
     if not danh_sach_luan_diem:
@@ -411,8 +412,8 @@ def tom_tat_chinh_luan_cho_persona(persona: dict, bai: dict, client,
     style = xac_dinh_style(persona, genre, genre_score)
     prompt, day_du = build_chinh_luan_prompt(persona, bai, style, genre)
 
-    def _goi():
-        return client.models.generate_content(
+    async def _goi():
+        return await client.aio.models.generate_content(
             model=model_name,
             contents=prompt,
             config={"temperature": 0.0},
@@ -422,7 +423,8 @@ def tom_tat_chinh_luan_cho_persona(persona: dict, bai: dict, client,
     chi_so_nghi_thieu = []
     acronym_nghi_thieu = []
     for lan_thu in range(SO_LAN_THU_LAI_KIEM_TRA_LUAN_DIEM + 1):
-        response = retry_generate(_goi)
+        async with semaphore:
+            response = await retry_generate_async(_goi)
         summary = response.text.strip()
         chi_so_nghi_thieu = _luan_diem_nghi_thieu(summary, danh_sach_luan_diem)
         acronym_nghi_thieu = _thuat_ngu_chua_giai_thich(summary, style)
@@ -623,16 +625,27 @@ if __name__ == "__main__":
     out_dir.mkdir(parents=True, exist_ok=True)
 
     tong = len(personas_can_chay)
-    for i, persona in enumerate(personas_can_chay, start=1):
+
+
+    async def xu_ly_mot_persona(i, persona, semaphore):
         out_path_json = out_dir / f"{persona['id']}.json"
         out_path_md = out_dir / f"{persona['id']}.md"
 
         if out_path_json.exists():
             print(f"[{i}/{tong}] {persona['id']} đã tồn tại -> bỏ qua")
-            continue
+            return
 
         print(f"\n[{i}/{tong}] Bắt đầu xử lý {persona['id']}...")
-        ket_qua = tom_tat_chinh_luan_cho_persona(persona, bai, client, model_name=args.model)
+        try:
+            ket_qua = await tom_tat_chinh_luan_cho_persona(persona, bai, client, semaphore, model_name=args.model)
+        except Exception as e:
+            print(f"[{persona['id']}] LỖI, bỏ qua persona này: {e}")
+            return
+
+        if ket_qua.get("loi"):
+            # không ghi file để không bị "đã tồn tại -> bỏ qua" ở lần chạy sau
+            print(f"[{persona['id']}] bỏ qua, không có bản tóm tắt: {ket_qua['loi']}")
+            return
 
         with open(out_path_json, "w", encoding="utf-8") as f:
             json.dump(ket_qua, f, ensure_ascii=False, indent=2)
@@ -640,6 +653,15 @@ if __name__ == "__main__":
             f.write(ket_qua["summary"])
 
         dinh_dang = "đầy đủ (tiêu đề + mở-thân-kết)" if ket_qua["day_du"] else "vào thẳng vấn đề"
-        print(f"Genre: {ket_qua['genre']} ({ket_qua['genre_score']}) — Style: {ket_qua['style']} — Định dạng: {dinh_dang}")
-        print(f"Số luận điểm: {ket_qua['so_luan_diem']}")
-        print(f"Đã ghi: {out_path_json}")
+        print(f"[{persona['id']}] Genre: {ket_qua['genre']} ({ket_qua['genre_score']}) — Style: {ket_qua['style']} — Định dạng: {dinh_dang}")
+        print(f"[{persona['id']}] Số luận điểm: {ket_qua['so_luan_diem']}")
+        print(f"[{persona['id']}] Đã ghi: {out_path_json}")
+
+
+    async def chay():
+        semaphore = asyncio.Semaphore(GEMINI_MAX_CONCURRENCY)
+        await asyncio.gather(
+            *[xu_ly_mot_persona(i, p, semaphore) for i, p in enumerate(personas_can_chay, start=1)]
+        )
+
+    asyncio.run(chay())
