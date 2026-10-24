@@ -1,7 +1,3 @@
-""" Cách chạy:
-python3 -m pipeline.baochi.rss_personalize --variant nt_nn_tc_kn_cd_ch
-"""
-
 import re
 import json
 import hashlib
@@ -1131,7 +1127,7 @@ if __name__ == "__main__":
         raise SystemExit("--id chỉ dùng để test 1 persona trên 1 file, không dùng chung với --data-dir.")
 
     ten_file_persona = f"state_profiles_{args.variant}.json" if args.variant else "state_profiles_nt_nn_tc_kn_cd_ch.json"
-    with open(MD_ROOT / "data" / "profile_variants" / ten_file_persona, encoding="utf-8") as f:
+    with open(MD_ROOT / "data" / "profile" / ten_file_persona, encoding="utf-8") as f:
         personas = json.load(f)
 
 

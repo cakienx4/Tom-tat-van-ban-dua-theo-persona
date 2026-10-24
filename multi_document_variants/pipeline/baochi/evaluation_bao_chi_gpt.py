@@ -1,7 +1,3 @@
-""" Cách chạy:
-python3 -m pipeline.baochi.evaluate_rss_summary --variant nt_nn_tc_kn_cd_ch
-"""
-
 import json
 import time
 import re
@@ -12,7 +8,7 @@ from pipeline.utils import (
     retry_generate_async, OSS_MODEL_NAME, tao_oss_client_async,
     OSS_MAX_CONCURRENCY_SUMMARY,
 )
-from pipeline.baochi.rss_personalize_gpt import BANNED_PHRASES, load_articles, _dam_bao_co_link
+from pipeline.baochi.bao_chi_personalize_gpt import BANNED_PHRASES, load_articles, _dam_bao_co_link
 ROOT_DIR = Path(__file__).resolve().parents[3]
 MD_ROOT = ROOT_DIR / "multi_document_variants"
 SHARED_ROOT = ROOT_DIR / "shared"
@@ -33,7 +29,7 @@ NGUONG_TI_LE_PASS_BATCH = 0.8
 
 def load_personas(variant=None):
     ten_file = f"state_profiles_{variant}.json" if variant else "state_profiles_nt_nn_tc_kn_cd_ch.json"
-    duong_dan = MD_ROOT / "data" / "profile_variants" / ten_file
+    duong_dan = MD_ROOT / "data" / "profile" / ten_file
     with open(duong_dan, encoding="utf-8") as f:
         return json.load(f)
 
