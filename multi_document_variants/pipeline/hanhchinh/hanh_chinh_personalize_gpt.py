@@ -15,9 +15,8 @@ _STATE_GRAPH = load_graph(str(_ONTOLOGY_PATH))
 HANH_CHINH_MAX_OUTPUT_TOKENS = 3200
 HANH_CHINH_MAX_OUTPUT_TOKENS_MO_RONG = 6000
 NGUONG_TOKEN_MOI_BATCH_MUC = 1800
-OSS_CONTEXT_LIMIT = 8192   # ngữ cảnh thực tế của endpoint OSS DÙNG CHUNG cho prompt + completion,
-                           # không phải 2 ngưỡng tách biệt - vượt ngưỡng này dễ gây lỗi 400/500
-AN_TOAN_TOKEN_DU = 400     # chừa dư an toàn, tránh sát ngưỡng context
+OSS_CONTEXT_LIMIT = 8192
+AN_TOAN_TOKEN_DU = 400
 
 GIAI_THICH_TU_VIET_TAT = {
     "UBND": "Ủy ban nhân dân",
@@ -72,7 +71,7 @@ _MAU_VIET_TAT_TIENG_VIET = re.compile(
 )
 
 _LOAI_TRU_KHONG_PHAI_VIET_TAT = {
-    "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",  # số La Mã
+    "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
 }
 
 
@@ -94,9 +93,6 @@ def _viet_tat_xuat_hien_trong_batch(danh_sach_muc, style):
     return sorted(tim_thay)
 
 def _batch_can_giai_thich(batch_muc, style):
-    """True nếu batch có ít nhất 1 mục CẦN giải thích thuật ngữ (tầng trung bình,
-    hoặc tầng nền khi style là khong_chuyen_mon/binh_thuong). Batch toàn mục tầng
-    chuyên sâu trả về False để không chèn giải thích thừa vào đoạn chuyên sâu."""
     for muc in batch_muc:
         tang = muc.get("tang_do_sau", TANG_NEN)
         if tang == TANG_TRUNG_BINH:
@@ -106,14 +102,9 @@ def _batch_can_giai_thich(batch_muc, style):
     return False
 
 def _tinh_max_output_token_an_toan(so_token_prompt, cap_mong_muon):
-    """Không bao giờ xin completion vượt quá phần ngữ cảnh còn lại sau khi trừ prompt - tránh
-    lỗi do prompt + completion > OSS_CONTEXT_LIMIT. Nếu prompt của batch này nhỏ hơn nhiều so
-    với trường hợp xấu nhất, hàm này cho phép xin completion cao hơn cap_mong_muon một cách an
-    toàn (tận dụng ngữ cảnh còn trống), thay vì luôn dùng 1 số cố định."""
     con_lai = OSS_CONTEXT_LIMIT - so_token_prompt - AN_TOAN_TOKEN_DU
     return max(512, min(cap_mong_muon, con_lai))
 
-# ==== BƯỚC 1: XÁC ĐỊNH TẦNG ĐỘ SÂU CHO TỪNG MỤC + STYLE TOÀN BÀI ====
 
 TANG_CHUYEN_SAU = 0
 TANG_TRUNG_BINH = 1
@@ -176,7 +167,6 @@ def gan_tang_do_sau_va_style(persona_id, danh_sach_muc, ket_qua_khop_persona):
     return danh_sach_muc_moi, style
 
 
-# ==== BƯỚC 2: TEXT HƯỚNG DẪN THEO TẦNG ĐỘ SÂU VÀ THEO STYLE ====
 
 GOP_MUC_NEN_THEO_STYLE = {
     "chuyen_sau": (
@@ -216,7 +206,6 @@ GOP_MUC_NEN_THEO_STYLE = {
 }
 
 
-# ==== BƯỚC 3: DỰNG PROMPT ====
 
 SO_MUC_TOI_DA_MOI_BATCH = 4
 
@@ -280,7 +269,7 @@ def _lam_sach_so_thu_tu_dau_heading(heading):
     if not heading:
         return heading
     da_sach = _MAU_SO_THU_TU_DAU_HEADING.sub("", heading, count=1).strip()
-    return da_sach or heading  # phòng heading CHỈ là số/ký hiệu, tránh xóa sạch thành rỗng
+    return da_sach or heading
 
 def _dinh_dang_danh_sach_muc(danh_sach_muc, style):
     ds = ""
@@ -300,12 +289,6 @@ def _dinh_dang_danh_sach_muc(danh_sach_muc, style):
     return ds
 
 def _chia_muc_theo_token(danh_sach_muc, style):
-    """Chia danh_sach_muc thành các batch liên tiếp, KHÔNG đảo thứ tự, sao cho tổng số token ước
-    lượng của cả batch (bao gồm chú giải tầng dùng chung) không vượt quá NGUONG_TOKEN_MOI_BATCH_MUC.
-    Cần chia vì đưa hết văn bản hành chính dài vào 1 prompt duy nhất khiến prompt lên tới 16k+
-    token, vượt xa ngưỡng context thực tế ~8192 token/request của endpoint OSS -> timeout/500
-    hàng loạt. Tính trên cả batch ứng viên (không phải tính rời từng mục) để tự động phản ánh
-    đúng lợi ích của việc gộp chú giải yêu cầu theo tầng trong _dinh_dang_danh_sach_muc."""
     batches = []
     batch_hien_tai = []
 
@@ -503,7 +486,6 @@ def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, st
     return prompt
 
 
-# ==== BƯỚC 4: HÀM CHẠY CHÍNH CHO 1 PERSONA ====
 async def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_persona, client, semaphore,
                                          model_name=OSS_MODEL_NAME):
     danh_sach_muc = ket_qua_extract.get("danh_sach_muc", [])

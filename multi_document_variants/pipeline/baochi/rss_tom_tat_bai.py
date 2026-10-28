@@ -2,13 +2,6 @@
 Tầng 1 của pipeline cá nhân hóa RSS báo chí: tóm tắt/cô đọng TỪNG bài báo riêng lẻ,
 KHÔNG cá nhân hóa theo persona (persona-agnostic) — vì 1 bài báo có thể được nhiều
 persona quan tâm, tóm tắt 1 lần rồi dùng lại cho tất cả, tránh gọi LLM lặp lại.
-
-Input mỗi bài: content đầy đủ (nếu có) hoặc RSS summary.
-Output mỗi bài: 1 đoạn văn cô đọng, đủ chi tiết để tầng 2 (rss_personalize.py)
-dùng viết bài cá nhân hóa cuối cùng, nhưng ngắn hơn nhiều lần so với content gốc.
-
-Cache theo `link` bài báo (không theo persona_id) — an toàn với thay đổi RSS snapshot,
-vì cache key là link cụ thể của từng bài, không phải id cố định như bug cache cũ.
 """
 
 import hashlib
@@ -18,7 +11,7 @@ from pathlib import Path
 from pipeline.utils import retry_generate_async, OSS_MODEL_NAME
 
 TOM_TAT_BAI_MAX_TOKENS = 512
-TOM_TAT_BAI_MAX_KY_TU_NOI_DUNG = 6000  # cắt bớt content quá dài trước khi đưa vào prompt
+TOM_TAT_BAI_MAX_KY_TU_NOI_DUNG = 6000
 
 CACHE_TOM_TAT_BAI_DIR = Path("output/bao_chi/rss_tom_tat_bai")
 
@@ -61,8 +54,6 @@ async def tom_tat_mot_bai(bai: dict, client, semaphore, model_name: str = OSS_MO
 
     noi_dung_goc = bai.get("content") or bai.get("summary", "")
     if len(noi_dung_goc) <= TOM_TAT_BAI_MAX_TOKENS * 3:
-        # Nội dung gốc đã đủ ngắn (ước lượng ~3 ký tự/token), không cần tóm tắt qua LLM,
-        # dùng thẳng để tiết kiệm lượt gọi.
         tom_tat = noi_dung_goc
         _ghi_cache_bai(cache_path, tom_tat)
         return tom_tat
@@ -98,7 +89,6 @@ def _ghi_cache_bai(cache_path: Path, tom_tat: str) -> None:
 
 
 async def tom_tat_nhieu_bai(bai_list: list, client, semaphore, model_name: str = OSS_MODEL_NAME) -> dict:
-    """Tóm tắt song song nhiều bài, trả về dict {link: tom_tat}."""
     import asyncio
 
     ket_qua = {}

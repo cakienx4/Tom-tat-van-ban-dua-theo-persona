@@ -224,7 +224,6 @@ def tinh_ket_qua_chung(danh_gia: dict) -> bool:
         for i in range(1, 8)
     )
 
-# ==== CLI ====
 
 async def chay_danh_gia(client, semaphore, bai_id: str, persona_id: str, duong_dan_bai: str,
                         duong_dan_summary: str, duong_dan_output: str, model: str = OSS_MODEL_NAME):

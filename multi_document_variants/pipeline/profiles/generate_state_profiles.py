@@ -242,8 +242,6 @@ CHUC_DANH_BY_CAPBAC = {
     "Chuyên viên cao cấp / Lãnh đạo": ["Trưởng phòng", "Phó Giám đốc", "Chuyên viên cao cấp"],
 }
 
-# cac cau mo dau the hien tinh dinh huong/khuynh huong, khong chi la 1 cau hoi
-# hanh chinh kho khan nhu truoc, giup phan biet "thien huong quan tam" cua tung nguoi
 CAU_HOI_INTRO = [
     "Có xu hướng ưu tiên theo dõi thông tin liên quan đến việc {noi_dung}.",
     "Luôn dành sự quan tâm sát sao đến việc {noi_dung}.",
@@ -251,8 +249,6 @@ CAU_HOI_INTRO = [
     "Có khuynh hướng tập trung nhiều hơn vào việc {noi_dung}.",
 ]
 
-# thu tu cac truong dung de sinh mo_ta_chung theo cap do (dung cho viec sinh
-# nhieu bo du lieu bien the sau nay, moi bo chi lay N truong dau trong danh sach nay)
 FIELD_ORDER = ["nganh_to", "nganh_nho", "to_chuc", "kinh_nghiem", "chu_de", "cau_hoi_truoc_mat"]
 
 

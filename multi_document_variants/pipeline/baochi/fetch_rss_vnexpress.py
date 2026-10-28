@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 VN_TZ = timezone(timedelta(hours=7))
 
 def _ngay_dang_vn(entry):
-    """Tra ve date() theo gio Viet Nam cua entry RSS, hoac None neu entry khong co pub date."""
     parsed = entry.get("published_parsed")
     if not parsed:
         return None
@@ -21,7 +20,6 @@ def _ngay_dang_vn(entry):
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = ROOT_DIR / "multi_document_variants" / "data"
 
-# map slug RSS -> tên chuyên mục (để sau đối chiếu với genre)
 CATEGORIES = {
     "thoi-su": "Thời sự",
     "the-gioi": "Thế giới",

@@ -710,9 +710,6 @@ async def viet_mot_batch(persona: dict, nhom_ten: str, idx_nhom: int, tong_so_nh
 
 def build_mo_ket_prompt(persona: dict, day_du: bool, ten_cac_nhom: list, tin_hang_dau: list,
                         closing_style: str, opening_style: str = None) -> str:
-    """Prompt viết TIÊU ĐỀ + ĐOẠN MỞ BÀI (chỉ khi day_du=True) + ĐOẠN KẾT LUẬN — dựa trên nội
-    dung đã cô đọng (tầng 1) của 2-3 tin ưu tiên cao nhất, KHÔNG dùng lại toàn bộ thân bài đã
-    viết (tránh input phình to lại, đây chính là nguyên nhân gây lỗi 500/timeout ở bản gốc)."""
     ds_tin_hang_dau = _dinh_dang_danh_sach_tin(tin_hang_dau)
     thu_tu_nhom = " -> ".join(ten_cac_nhom)
 
@@ -765,7 +762,6 @@ def build_mo_ket_prompt(persona: dict, day_du: bool, ten_cac_nhom: list, tin_han
 async def viet_mo_ket(persona: dict, day_du: bool, ten_cac_nhom: list, tin_hang_dau: list,
                       opening_style: str, closing_style: str, client, semaphore_summary,
                       model_name: str = OSS_MODEL_NAME) -> tuple:
-    """Trả về (tieu_de, mo_bai, ket_luan, bi_cat_cut). tieu_de/mo_bai rỗng khi day_du=False."""
     prompt = build_mo_ket_prompt(persona, day_du, ten_cac_nhom, tin_hang_dau, closing_style,
                                  opening_style)
 
@@ -867,7 +863,6 @@ async def viet_phan_lien_quan(persona: dict, tin_gian_tiep: list, bai_lien_quan:
 
 
 def _chia_batch(danh_sach: list, kich_thuoc: int) -> list:
-    """Chia 1 danh sách thành các batch con liên tiếp, mỗi batch tối đa kich_thuoc phần tử."""
     return [danh_sach[i:i + kich_thuoc] for i in range(0, len(danh_sach), kich_thuoc)]
 
 

@@ -33,23 +33,15 @@ def clean_summary(raw_html):
     return text.strip()
 
 def _la_dong_gach_ngang(text):
-    """Nhan dien dong phan cach kieu '-----------------------------'."""
     return bool(re.fullmatch(r"[-–—\s]{5,}", text.strip()))
 
 
 def _la_dong_ghi_chu_xem_bao(text):
-    """Nhan dien dong ghi chu kieu '(★) Xem Báo Nhân Dân từ số ra ngày ...'."""
     text_sach = text.strip().lower()
     return text_sach.startswith("(★)") or "xem báo nhân dân từ số" in text_sach
 
 
 def _la_dong_ky_ten_tac_gia(text):
-    """
-    Heuristic nhan dien dong ky ten tac gia o cuoi bai (vi du 'HÀ NHÂN - VŨ ANH'):
-    it tu, toan chu hoa, khong ket thuc bang dau cau ket cau.
-    CHI ap dung cho dong cuoi cung con lai sau khi da loc gach ngang/ghi chu -
-    khong quet toan bo doan van vi co the trung voi cau ngan hop le trong bai.
-    """
     text_sach = text.strip()
     if not text_sach:
         return False
@@ -63,11 +55,6 @@ def _la_dong_ky_ten_tac_gia(text):
 
 
 def _loc_doan_thua_cuoi_bai(danh_sach_doan):
-    """
-    Loc bo cac dong thua o CUOI danh sach doan (gach ngang, ghi chu Xem Bao,
-    ten tac gia ky cuoi) - duyet tu cuoi len, dung ngay khi gap doan noi dung that
-    de khong lo xoa nham cau ket luan hop le cua bai.
-    """
     ket_qua = list(danh_sach_doan)
     while ket_qua:
         doan_cuoi = ket_qua[-1]
@@ -81,20 +68,17 @@ def _loc_doan_thua_cuoi_bai(danh_sach_doan):
     return ket_qua
 
 def fetch_content(article_url):
-    """Lấy nội dung bài viết từ URL Báo Nhân Dân dựa theo cấu trúc DOM thực tế."""
     try:
         resp = requests.get(article_url, headers=HEADERS, timeout=10)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Ưu tiên lấy trực tiếp thẻ bài viết chính xác theo class & itemprop trong ảnh
         content_div = (
             soup.find("div", class_="article__body")
             or soup.find("div", attrs={"itemprop": "articleBody"})
             or soup.select_one("div.main.col.content.col")
         )
 
-        # Fallback nếu cấu trúc bài viết dạng khác
         if content_div is None:
             content_div = soup.select_one("div.detail-content, div.content, article")
 
@@ -109,12 +93,10 @@ def fetch_content(article_url):
             if not text:
                 continue
 
-            # Bỏ chú thích ảnh (thường chứa class Image/caption/fig-caption)
             p_classes = p.get("class", [])
             if any(cls in ["Image", "caption", "fig-caption"] for cls in p_classes):
                 continue
 
-            # Bỏ đoạn căn phải (tác giả, nguồn)
             style = p.get("style", "")
             if "text-align:right" in style.replace(" ", ""):
                 continue
@@ -155,9 +137,6 @@ def fetch_category(slug, category_name):
 
 
 def _doc_du_lieu_cu():
-    """Đọc file JSON đã có (nếu có) để tái sử dụng id theo link, tránh việc
-    crawl lại (do RSS đổi nội dung theo thời gian) làm xáo trộn id của các
-    bài đã tồn tại trong dataset."""
     if not JSON_PATH.exists():
         return {}
     with open(JSON_PATH, encoding="utf-8") as f:

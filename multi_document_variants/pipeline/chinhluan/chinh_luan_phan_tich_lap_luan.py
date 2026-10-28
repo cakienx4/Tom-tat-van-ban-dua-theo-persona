@@ -1,13 +1,3 @@
-"""
-pipeline/rss/chinhluan/chinh_luan_phan_tich_lap_luan_gemini.py
-
-Phan tich cau truc lap luan cua 1 bai chinh luan (Van de -> Luan diem -> Luan cu -> Ket luan),
-dua tren noi_dung_da_danh_so ([DOAN N]) da tach o chinh_luan_extract.py.
-
-Ket qua duoc dung o buoc personalize de bat buoc giu du luan diem cot loi
-va khong lam sai lech ket luan/loi keu goi cua tac gia.
-"""
-
 import json
 import argparse
 import os
@@ -69,10 +59,6 @@ LOAI_CHINH_LUAN_HIEN_THI = {
 
 
 def goi_llm_phan_tich(client, bai_da_tach_doan: dict, model: str = SUMMARY_MODEL_NAME) -> dict:
-    """
-    Goi LLM phan tich cau truc lap luan cho 1 bai da tach doan.
-    Tra ve dict rong ("") neu bai khong co noi dung de phan tich.
-    """
     noi_dung_da_danh_so = bai_da_tach_doan.get("noi_dung_da_danh_so", "")
     if not noi_dung_da_danh_so.strip():
         print(f"Bài {bai_da_tach_doan.get('id')} không có nội dung đã đánh số, bỏ qua.")

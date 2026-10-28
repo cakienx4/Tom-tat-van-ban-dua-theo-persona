@@ -72,7 +72,6 @@ def eval_pass_chuan(eval_json):
 
 
 def _tach_variant_va_id(duong_dan_tuong_doi_parts):
-    # 1 phan tu -> khong co variant; 2 phan tu -> [variant, id]
     if len(duong_dan_tuong_doi_parts) == 1:
         return None, duong_dan_tuong_doi_parts[0]
     return duong_dan_tuong_doi_parts[0], duong_dan_tuong_doi_parts[1]

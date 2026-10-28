@@ -25,7 +25,6 @@ TIEU_CHI = [
 TANG_TEN = {0: "chuyên sâu", 1: "trung bình", 2: "nền"}
 
 
-# ==== BƯỚC 1: LỌC MỤC RỖNG (dùng lại đúng điều kiện lọc bên personalize) ====
 
 def loc_muc_hop_le(danh_sach_muc):
     ket_qua = []
@@ -36,7 +35,6 @@ def loc_muc_hop_le(danh_sach_muc):
     return ket_qua
 
 
-# ==== BƯỚC 2: FORMAT MỤC GỐC THÀNH BLOCK [MỤC N] ====
 
 def dinh_dang_danh_sach_muc(danh_sach_muc_loc):
     ds = ""
@@ -51,7 +49,6 @@ def dinh_dang_danh_sach_muc(danh_sach_muc_loc):
     return ds
 
 
-# ==== BƯỚC 3: HẬU KIỂM PYTHON - PHÁT HIỆN ĐÁNH SỐ MỤC CÒN SÓT ====
 
 MAU_DANH_SO_MUC = re.compile(
     r"(^|\n)\s*(mục\s*\d+[:.]|(\(?\d+[.)]\s){1}|[IVX]+[.)]\s)",
@@ -109,7 +106,6 @@ def hau_kiem_fail_reasons(cham, summary):
     return canh_bao
 
 
-# ==== BƯỚC 4: DỰNG PROMPT ĐÁNH GIÁ ====
 
 def build_judge_prompt(persona, ket_qua_tom_tat, danh_sach_muc_loc):
     danh_sach_muc_text = dinh_dang_danh_sach_muc(danh_sach_muc_loc)
@@ -266,7 +262,6 @@ thêm ngoài JSON:
     return prompt
 
 
-# ==== BƯỚC 5: GỌI LLM CHẤM + HẬU KIỂM ====
 
 async def cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, semaphore, model_name=SUMMARY_MODEL_NAME):
     danh_sach_muc_goc = ket_qua_tom_tat.get("danh_sach_muc_voi_tang", [])
@@ -429,7 +424,6 @@ if __name__ == "__main__":
 
 
     async def cham_va_ghi(i, persona_id, client, semaphore):
-        """Trả về 'dat' / 'khong_dat' / 'bo_qua' / 'loi', hoặc None nếu đã chấm rồi (không tính thống kê)."""
         out_path = EVAL_DIR / f"{persona_id}.json"
         if out_path.exists():
             print(f"[{i}/{tong}] {persona_id} đã chấm rồi -> bỏ qua")

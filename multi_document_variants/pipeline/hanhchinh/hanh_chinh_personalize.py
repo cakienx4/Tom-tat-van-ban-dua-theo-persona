@@ -11,7 +11,6 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 _ONTOLOGY_PATH = ROOT_DIR / "persona_states.ttl"
 _STATE_GRAPH = load_graph(str(_ONTOLOGY_PATH))
 
-# ==== BƯỚC 1: XÁC ĐỊNH TẦNG ĐỘ SÂU CHO TỪNG MỤC + STYLE TOÀN BÀI ====
 
 TANG_CHUYEN_SAU = 0
 TANG_TRUNG_BINH = 1
@@ -73,7 +72,6 @@ def gan_tang_do_sau_va_style(persona_id, danh_sach_muc, ket_qua_khop_persona):
 
     return danh_sach_muc_moi, style
 
-# ==== BƯỚC 2: TEXT HƯỚNG DẪN THEO TẦNG ĐỘ SÂU VÀ THEO STYLE ====
 
 MUC_DO_THEO_TANG = {
     TANG_CHUYEN_SAU: (
@@ -135,11 +133,6 @@ TANG_NEN_THEO_STYLE = {
     ),
 }
 
-# Quy tắc GỘP MỤC NỀN chỉ áp dụng cho style "binh_thuong" (toàn bộ văn bản
-# không liên quan gì tới người đọc). Với "chuyen_sau" và "khong_chuyen_mon",
-# KHÔNG gộp nữa - mỗi mục nền vẫn có đoạn riêng, tóm tắt đầy đủ ý hơn (nhưng
-# vẫn tuân đúng yêu cầu tầng nền: không liệt kê số liệu/mốc thời gian/tên đơn
-# vị cụ thể, không dùng thuật ngữ chuyên ngành khác lĩnh vực).
 GOP_MUC_NEN_THEO_STYLE = {
     "chuyen_sau": (
         "- KHÔNG gộp các mục tầng nền lại với nhau. Mỗi mục (kể cả mục tầng "
@@ -167,7 +160,6 @@ GOP_MUC_NEN_THEO_STYLE = {
 }
 
 
-# ==== BƯỚC 3: DỰNG PROMPT ====
 
 def _dinh_dang_danh_sach_muc(danh_sach_muc, style):
     ds = ""
@@ -322,7 +314,6 @@ def build_hanh_chinh_prompt(persona, ket_qua_extract, danh_sach_muc_voi_tang, st
     return prompt
 
 
-# ==== BƯỚC 4: HÀM CHẠY CHÍNH CHO 1 PERSONA ====
 
 async def tom_tat_hanh_chinh_cho_persona(persona, ket_qua_extract, ket_qua_khop_persona, client, semaphore,
                                          model_name=SUMMARY_MODEL_NAME):
@@ -415,8 +406,6 @@ if __name__ == "__main__":
 
     ten_file_goc = duong_dan_file.stem
 
-    # bước 1: trích xuất - dùng cache nếu đã chạy văn bản này trước đó,
-    # để không phải đọc lại docx mỗi lần đổi persona
     extract_cache_path = EXTRACT_CACHE_DIR / f"{ten_file_goc}.json"
     if extract_cache_path.exists():
         with open(extract_cache_path, encoding="utf-8") as f:
@@ -428,8 +417,6 @@ if __name__ == "__main__":
         with open(extract_cache_path, "w", encoding="utf-8") as f:
             json.dump(ket_qua_extract, f, ensure_ascii=False, indent=2)
 
-    # bước 2: khớp persona theo ngành - có gọi LLM nên cũng cache lại,
-    # để đổi persona khác trên CÙNG văn bản không phải gọi LLM lại
     match_cache_path = MATCH_CACHE_DIR / f"{ten_file_goc}.json"
     if match_cache_path.exists():
         with open(match_cache_path, encoding="utf-8") as f:
@@ -441,7 +428,6 @@ if __name__ == "__main__":
         with open(match_cache_path, "w", encoding="utf-8") as f:
             json.dump(ket_qua_khop_persona, f, ensure_ascii=False, indent=2)
 
-    # bước 3: load persona theo id
     ten_file_persona = f"state_profiles_{args.variant}.json" if args.variant else "state_profiles_nt_nn_tc_kn_cd_ch.json"
     duong_dan_persona = ROOT_DIR / "data" / "profile" / ten_file_persona
     with open(duong_dan_persona, encoding="utf-8") as f:
@@ -480,7 +466,6 @@ if __name__ == "__main__":
         out_path_json = out_dir / f"{persona['id']}.json"
         out_path_md = out_dir / f"{persona['id']}.md"
 
-        # đã chạy rồi thì bỏ qua
         if out_path_json.exists():
             print(f"[{i}/{tong}] {persona['id']} đã tồn tại -> bỏ qua")
             return

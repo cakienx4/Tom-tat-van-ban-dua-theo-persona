@@ -6,16 +6,12 @@ from types import SimpleNamespace
 
 from rdflib import Graph, Namespace
 
-# Lưu ý: httpx và openai chỉ được import bên trong hàm tao_oss_raw_client_async()
-# (import trễ) để máy chỉ chạy Gemini mà không cài openai/httpx vẫn import được file này.
 
 MAX_RETRY_ATTEMPTS = 5
 
-# ===== Gemini =====
 SUMMARY_MODEL_NAME = "gemini-3.1-flash-lite"
 GEMINI_MAX_CONCURRENCY = 3
 
-# ===== gpt-oss-120b (RunAI) =====
 OSS_MAX_CONCURRENCY = 200
 OSS_MAX_CONCURRENCY_SUMMARY = 15
 
@@ -55,10 +51,8 @@ def load_graph(ttl_path: str) -> Graph:
     return g
 
 
-# ===== Retry (dùng chung cho Gemini và OSS) =====
 
 def retry_generate(func, *args, **kwargs):
-    """Bản sync (dùng cho các module Gemini chưa chuyển sang async)."""
     attempt = 0
     while True:
         try:
@@ -90,7 +84,6 @@ def retry_generate(func, *args, **kwargs):
 
 
 async def retry_generate_async(func, *args, **kwargs):
-    """Bản async. func phải là coroutine function (async def). Dùng cho cả Gemini và OSS."""
     attempt = 0
     while True:
         try:
@@ -127,7 +120,6 @@ async def retry_generate_async(func, *args, **kwargs):
             raise
 
 
-# ===== gpt-oss-120b client =====
 
 def tao_oss_raw_client_async():
     import httpx

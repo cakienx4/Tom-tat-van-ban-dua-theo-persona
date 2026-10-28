@@ -43,10 +43,6 @@ def load_articles_index(duong_dan_data: Path):
 
 
 def _doc_tom_tat_bai(link: str) -> str:
-    """Đọc lại bản tóm tắt tầng 1 (đã cache sẵn khi rss_personalize.py chạy, cache theo link,
-    hoàn toàn miễn phí - không tốn thêm lượt gọi LLM nào). Đây CHÍNH XÁC là nội dung nguồn mà
-    LLM viết bài đã nhìn thấy (không phải văn bản gốc đầy đủ) - nên evaluate cũng dùng lại đúng
-    bản này để chấm cho công bằng, thay vì đối chiếu với nội dung LLM chưa từng thấy."""
     if not link:
         return "(không có link)"
     key = hashlib.md5(link.encode("utf-8")).hexdigest()[:16]
@@ -58,7 +54,6 @@ def _doc_tom_tat_bai(link: str) -> str:
 
 
 def lay_noi_dung_nguon_C(tin_links: list) -> list:
-    """Nguồn cho nhóm tin CHÍNH (C) - dùng bản tầng 1 cô đọng (đúng cái LLM viết bài đã thấy)."""
     ket_qua = []
     for link in tin_links:
         ket_qua.append({"link": link, "noi_dung": _doc_tom_tat_bai(link)})
@@ -66,9 +61,6 @@ def lay_noi_dung_nguon_C(tin_links: list) -> list:
 
 
 def lay_noi_dung_nguon_GB(items: list, index_theo_link: dict, index_theo_title: dict) -> tuple:
-    """Nguồn cho nhóm tin gián tiếp (G) / bài góc nhìn (B) - dùng field "summary" (RSS gốc), vì
-    đây đúng là nội dung LLM viết bài đã thấy cho 2 nhóm này (dung_full_content=False khi build
-    prompt ở rss_personalize.py), KHÔNG dùng content đầy đủ."""
     ket_qua = []
     so_khong_tim_thay = 0
     for item in items:
@@ -108,7 +100,6 @@ def _chuan_hoa_ten_nhom(s: str) -> str:
     return _chuan_hoa(s)
 
 def _trich_cac_doan_trich_dan(text: str) -> list:
-    """Tìm tất cả cụm được đặt trong dấu ngoặc kép (kiểu " " hoặc " ") trong ly_do."""
     ket_qua = []
     ket_qua.extend(re.findall(r'"([^"]{5,})"', text))
     ket_qua.extend(re.findall(r'\u201c([^\u201d]{5,})\u201d', text))

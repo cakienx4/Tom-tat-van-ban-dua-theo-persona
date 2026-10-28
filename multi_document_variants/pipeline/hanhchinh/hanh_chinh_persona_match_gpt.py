@@ -24,7 +24,6 @@ def lay_danh_sach_nganh(duong_dan_profile=PROFILE_PATH):
         nganh_to_set.add(nganh_to)
         nganh_to_sang_nganh_nho.setdefault(nganh_to, set()).add(nganh_nho)
 
-    # Chuyển set sang list để dễ đưa vào prompt
     nganh_to_sang_nganh_nho = {
         k: sorted(v) for k, v in nganh_to_sang_nganh_nho.items()
     }
@@ -232,8 +231,6 @@ def loc_persona_theo_ket_qua_khop(ket_qua_khop, duong_dan_profile=PROFILE_PATH):
     for persona in du_lieu:
         if persona.get("nganh_to") in nganh_to_khop:
             danh_sach_id_khop.append(persona.get("id"))
-            # đánh dấu riêng những persona khớp CẢ nganh_nho cụ thể,
-            # dùng để tăng độ tin cậy, không dùng để loại bớt id ở trên
             if nganh_nho_khop and persona.get("nganh_nho") in nganh_nho_khop:
                 danh_sach_id_khop_ca_nganh_nho.append(persona.get("id"))
 

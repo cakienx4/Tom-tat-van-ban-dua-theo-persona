@@ -59,7 +59,6 @@ CLOSING_STYLES_CHINH_LUAN = [
     "Kết bằng một câu khẳng định dứt khoát đúng tinh thần kết luận/lời kêu gọi của tác giả, KHÔNG thêm bất kỳ khuyến nghị, đề xuất hay gợi ý hành động/theo dõi nào ngoài nội dung đó.",
 ]
 
-# ==== BƯỚC 1: XÁC ĐỊNH STYLE THEO CHỦ ĐỀ CỦA PERSONA ====
 
 def xac_dinh_style(persona: dict, genre: str, genre_score: float) -> str:
     chu_de_list = lay_chu_de_hieu_luc(persona)
@@ -73,7 +72,6 @@ def xac_dinh_style(persona: dict, genre: str, genre_score: float) -> str:
     return "binh_thuong"
 
 
-# ==== BƯỚC 2: TEXT HƯỚNG DẪN VĂN PHONG THEO STYLE ====
 STYLE_INSTRUCTIONS = {
     "chuyen_sau": (
         "Persona này CÓ chuyên môn đúng lĩnh vực/chủ đề của bài viết. Trình bày "
@@ -109,7 +107,6 @@ LOAI_CHINH_LUAN_HIEN_THI = {
 }
 
 
-# ==== BƯỚC 2b: XÁC ĐỊNH ĐỊNH DẠNG (ĐẦY ĐỦ vs VÀO THẲNG VẤN ĐỀ) ====
 NGUONG_KINH_NGHIEM_TRANG_TRONG = 25
 
 
@@ -119,7 +116,6 @@ def lay_so_nam_kinh_nghiem(kinh_nghiem_text: str) -> int:
 
 
 def can_van_phong_day_du_chinh_luan(persona: dict, genre: str, loai_chinh_luan: str) -> bool:
-    # Xã luận là thể loại chính thức, định hướng - luôn dùng văn phong trang trọng
     if loai_chinh_luan == "xa_luan":
         return True
 
@@ -135,7 +131,6 @@ def can_van_phong_day_du_chinh_luan(persona: dict, genre: str, loai_chinh_luan: 
 
     return False
 
-# ==== BƯỚC 3: DỰNG PROMPT ====
 
 def _dinh_dang_danh_sach_luan_diem(phan_tich: dict) -> str:
     danh_sach = phan_tich.get("danh_sach_luan_diem", [])
@@ -251,7 +246,6 @@ def build_chinh_luan_prompt(persona: dict, bai: dict, style: str, genre: str) ->
     return prompt, day_du
 
 
-# ==== BƯỚC 3b: HẬU KIỂM ĐỘ BAO PHỦ LUẬN ĐIỂM (Python-only, không gọi LLM) ====
 
 _TU_DUNG_CHUNG_LUAN_DIEM = {
     "và", "của", "cho", "các", "là", "trong", "với", "để", "những",
@@ -278,7 +272,6 @@ def _luan_diem_nghi_thieu(summary: str, danh_sach_luan_diem: list, nguong_ty_le:
 _RE_TIEN_TO_DOAN = re.compile(r"\[ĐOẠN \d+\]\s*")
 
 
-# ==== BƯỚC 3c: HẬU KIỂM THUẬT NGỮ CHƯA GIẢI THÍCH (chỉ áp dụng khi style != "chuyen_sau") ====
 
 _RE_ACRONYM = re.compile(r"\b[A-Z]{2,6}\b")
 _RE_ROMAN_NUMERAL = re.compile(r"^[IVXLCDM]+$")
@@ -423,10 +416,6 @@ async def tom_tat_chinh_luan_cho_persona(persona: dict, bai: dict, client, semap
     }
 
 
-# ==== BƯỚC 3c: TỰ CHẠY EXTRACT + PHÂN TÍCH LẬP LUẬN (CÓ CACHE), GIỐNG PATTERN HÀNH CHÍNH ====
-# Hành chính cache theo ten_file_goc (docx). Chính luận không đọc docx mà đọc
-# 1 file JSON crawl RSS chứa nhiều bài, nên cache ở đây được khóa theo bai_id
-# thay vì tên file - mỗi bài 1 file cache riêng trong 2 thư mục dưới đây.
 
 EXTRACT_CACHE_DIR = "output/chinh_luan/extracted"
 PHAN_TICH_CACHE_DIR = "output/chinh_luan/phan_tich_lap_luan/tung_bai"
@@ -442,15 +431,12 @@ async def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client, semapho
     extract_cache_path = extract_cache_dir / f"{bai_id}.json"
     phan_tich_cache_path = phan_tich_cache_dir / f"{bai_id}.json"
 
-    # Đã có cả 2 bước trong cache -> dùng luôn, không gọi lại LLM
     if phan_tich_cache_path.exists():
         with open(phan_tich_cache_path, encoding="utf-8") as f:
             bai = json.load(f)
         print(f"Đã đọc bài {bai_id} (đã phân tích lập luận) từ cache: {phan_tich_cache_path}")
         return bai
 
-    # Bước 1: extract - cache riêng để đổi persona khác cho CÙNG bài
-    # không phải tách đoạn lại từ file crawl thô
     if extract_cache_path.exists():
         with open(extract_cache_path, encoding="utf-8") as f:
             ket_qua_extract = json.load(f)
@@ -472,8 +458,6 @@ async def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client, semapho
         with open(extract_cache_path, "w", encoding="utf-8") as f:
             json.dump(ket_qua_extract, f, ensure_ascii=False, indent=2)
 
-    # Bước 2: phân tích lập luận - có gọi LLM nên cache lại riêng, tách biệt
-    # với bước extract để không phải gọi lại LLM khi đổi persona khác
     print(f"Đang phân tích cấu trúc lập luận cho bài {bai_id}...")
     phan_tich = await goi_llm_phan_tich_async(client, semaphore, ket_qua_extract, model=model_name)
     bai = dict(ket_qua_extract)
@@ -484,7 +468,6 @@ async def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client, semapho
     return bai
 
 
-# ==== BƯỚC 5: CLI ====
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tóm tắt chính luận cá nhân hóa cho 1 persona")

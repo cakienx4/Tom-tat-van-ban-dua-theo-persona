@@ -5,7 +5,6 @@ BASE = Namespace("http://purl.obolibrary.org/obo/persona#")
 
 MD_ROOT = Path(__file__).resolve().parents[2]
 from pipeline.utils import load_graph
-# ── BRANCH GỐC (khớp persona_states.ttl) ───────────────────────────────────
 STATE_BRANCHES = ["nganh_cong_vu", "chu_de_chinh_sach"]
 
 BRANCH_LABELS = {
@@ -13,7 +12,6 @@ BRANCH_LABELS = {
     "chu_de_chinh_sach": "Chủ đề chính sách",
 }
 
-# ── QUAN HỆ (Object Properties, khớp persona_states.ttl) ───────────────────
 REL_LABELS = {
     "lien_quan_mat_thiet": "liên quan mật thiết",
     "uu_tien_hon":         "ưu tiên hơn",
@@ -86,7 +84,6 @@ def lay_ontology_context_cho_nganh(nganh_to: str) -> str:
     return build_ontology_context_cho_nganh(_STATE_GRAPH, nganh_to)
 
 
-# ── TEST ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     context = lay_ontology_context_cho_nganh("Y tế")

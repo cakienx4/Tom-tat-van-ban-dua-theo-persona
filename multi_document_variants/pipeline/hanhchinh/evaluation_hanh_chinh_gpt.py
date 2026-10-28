@@ -27,7 +27,6 @@ EVAL_MAX_OUTPUT_TOKENS_MO_RONG = 8000
 NGUONG_TOKEN_MOI_BATCH_MUC_CHAM = 2000
 
 
-# ==== BƯỚC 1: LỌC MỤC RỖNG (dùng lại đúng điều kiện lọc bên personalize) ====
 
 def loc_muc_hop_le(danh_sach_muc):
     ket_qua = []
@@ -38,7 +37,6 @@ def loc_muc_hop_le(danh_sach_muc):
     return ket_qua
 
 
-# ==== BƯỚC 2: FORMAT MỤC GỐC THÀNH BLOCK [MỤC N] ====
 
 def dinh_dang_danh_sach_muc(danh_sach_muc_loc):
     ds = ""
@@ -83,7 +81,6 @@ def _chia_muc_theo_token_cham(danh_sach_muc_loc):
 
     return batches
 
-# ==== BƯỚC 3: HẬU KIỂM PYTHON - PHÁT HIỆN ĐÁNH SỐ MỤC CÒN SÓT ====
 
 MAU_DANH_SO_MUC = re.compile(
     r"(^|\n)\s*(mục\s*\d+[:.]|(\(?\d+[.)]\s){1}|[IVX]+[.)]\s)",
@@ -130,10 +127,6 @@ def _chuan_hoa(s):
 _MAU_SO_HIEU_VAN_BAN = re.compile(
     r"\d{1,6}(?:/\d{2,4})?[/-][A-ZĐƯ]{1,4}[A-Za-zĐƯđư]{0,8}(?:[/-][A-ZĐƯ][A-Za-zĐƯđư]{0,8})*"
 )
-# Các mảnh KÝ HIỆU LOẠI văn bản/cơ quan ban hành hay bị judge trích RIÊNG (không kèm số phía
-# trước) rồi nhầm là "từ viết tắt tên cơ quan" cần giải thích - vd trích "TTg" thay vì
-# "777/TTg-TCCV", hoặc "NQ/TW" thay vì "71-NQ/TW". Đây là danh sách rà theo các case thực tế
-# đã gặp (NN034, NN035) - có thể cần bổ sung nếu gặp mảnh mới chưa liệt kê.
 _MANH_SO_HIEU_VAN_BAN = re.compile(
     r"\b(?:TTg|TCCV|NQ[/-](?:TW|HĐND|CP)|NQ-HĐND|NĐ[-/]CP|QĐ[-/](?:UBND|TTg)|KH[-/][A-ZĐƯ]{2,10}|CV[-/][A-ZĐƯ]{2,10})\b"
 )
@@ -144,12 +137,6 @@ _TU_KHOA_THIEU_CAN_CU = (
 
 
 def _fail_vi_doi_hoi_so_hieu_van_ban(tc, ly_do):
-    """Phát hiện TỰ MÂU THUẪN: judge fail 1 tiêu chí bo_cuc vì cho rằng thiếu số hiệu/ngày ban
-    hành văn bản viện dẫn (777/TTg-TCCV, 71-NQ/TW, 154/2025/NĐ-CP...) - trong khi CHÍNH prompt
-    chấm tiêu chí này đã ghi rõ: số hiệu/ngày ban hành văn bản viện dẫn KHÔNG tính là chi tiết
-    cần giữ, lược bỏ là ĐÚNG (xem build_judge_prompt_theo_batch, mục bo_cuc_chi_tiet_theo_tang).
-    Nếu ly_do vừa nhắc tới 1 số hiệu văn bản, vừa dùng từ khóa kiểu "thiếu"/"không đề cập" gần
-    đó, coi là judge tự mâu thuẫn với quy tắc của chính nó."""
     if tc not in ("bo_cuc_chi_tiet_theo_tang", "bo_cuc_uu_tien_thu_tu"):
         return False
     if not _MAU_SO_HIEU_VAN_BAN.search(ly_do):
@@ -159,11 +146,6 @@ def _fail_vi_doi_hoi_so_hieu_van_ban(tc, ly_do):
 
 
 def _fail_giong_dieu_vi_so_hieu_van_ban(tc, ly_do):
-    """Phát hiện TỰ MÂU THUẪN ở tiêu chí giong_dieu_phu_hop: judge fail vì cho rằng số hiệu/
-    tên văn bản viện dẫn (vd "Nghị định 21/TW", "Quyết định 777/TTg-TCCV") là "từ viết tắt"/
-    "thuật ngữ" cần giải thích - trong khi CHÍNH prompt chấm tiêu chí này đã ghi rõ: số hiệu
-    văn bản viện dẫn KHÔNG thuộc phạm vi tiêu chí này, không fail vì lý do đó (xem
-    build_judge_prompt_theo_batch, mục giong_dieu_phu_hop)."""
     if tc != "giong_dieu_phu_hop":
         return False
     return bool(_MAU_SO_HIEU_VAN_BAN.search(ly_do)) or bool(_MANH_SO_HIEU_VAN_BAN.search(ly_do))
@@ -171,11 +153,6 @@ def _fail_giong_dieu_vi_so_hieu_van_ban(tc, ly_do):
 _MAU_TU_VIET_TAT_HOP_LE = re.compile(r"^[A-ZĐƯ0-9](?:[A-ZĐƯ0-9/\-\.&]){1,14}$")
 
 def _fail_giong_dieu_vi_khong_phai_tu_viet_tat(tc, ly_do):
-    """Phát hiện TỰ MÂU THUẪN ở tiêu chí giong_dieu_phu_hop: prompt chấm tiêu chí này đã giới
-    hạn PHẠM VI CHỈ LÀ TỪ VIẾT TẮT dạng chữ hoa liền nhau (UBND, HĐND...), KHÔNG xét thuật ngữ/
-    cụm từ khác (đề án, sáp nhập, quy hoạch tổng thể, Luật Thủ đô, tên luật/quy hoạch...). Nếu
-    ly_do có trích dẫn cụ thể (trong ngoặc kép) nhưng KHÔNG trích dẫn nào khớp dạng viết tắt
-    hợp lệ, coi là judge tự vi phạm phạm vi tiêu chí do chính nó đặt ra."""
     if tc != "giong_dieu_phu_hop":
         return False
     cac_trich = _trich_cac_doan_trich_dan(ly_do)
@@ -184,11 +161,6 @@ def _fail_giong_dieu_vi_khong_phai_tu_viet_tat(tc, ly_do):
     return not any(_MAU_TU_VIET_TAT_HOP_LE.match(t.strip()) for t in cac_trich)
 
 def hau_kiem_va_sua_batch(nhan_batch, ket_qua_batch, summary):
-    """Kiểm tra trích dẫn của TỪNG tiêu chí fail trong 1 lượt chấm (1 đợt hoặc lượt tổng thể).
-    Nếu TOÀN BỘ trích dẫn làm bằng chứng của 1 tiêu chí fail đều KHÔNG có trong bản tóm tắt
-    (judge bịa hoàn toàn) thì TỰ ĐỘNG SỬA verdict đó thành pass - đúng logic tc_bi_bia đã áp
-    dụng ổn định bên báo chí (evaluate_rss_summary.py). Fail mà KHÔNG trích dẫn câu nào thì GIỮ
-    NGUYÊN fail (không đủ căn cứ coi là judge bịa - có thể judge đúng nhưng lười trích dẫn)."""
     summary_chuan = _chuan_hoa(summary)
     canh_bao = []
     ket_qua_da_sua = {}
@@ -284,7 +256,6 @@ def hau_kiem_va_sua_batch(nhan_batch, ket_qua_batch, summary):
     return ket_qua_da_sua, canh_bao
 
 
-# ==== BƯỚC 4: DỰNG PROMPT ĐÁNH GIÁ ====
 
 def build_judge_prompt_tong_the(persona, ket_qua_tom_tat, danh_sach_muc_loc):
     danh_sach_headings = _dinh_dang_headings_only(danh_sach_muc_loc)
@@ -513,7 +484,6 @@ def _gop_ket_qua_cham(cham_tong_the, cac_cham_batch):
         "thai_do_dung_dan": thai_do_dung_dan,
     }
 
-# ==== BƯỚC 5: GỌI LLM CHẤM + HẬU KIỂM ====
 
 async def cham_1_ban_tom_tat(persona, ket_qua_tom_tat, client, semaphore, model_name=OSS_MODEL_NAME):
     danh_sach_muc_goc = ket_qua_tom_tat.get("danh_sach_muc_voi_tang", [])

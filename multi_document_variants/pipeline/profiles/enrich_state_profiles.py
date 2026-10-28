@@ -38,16 +38,9 @@ def goi_llm(prompt):
 
 
 def lay_chuc_danh(kinh_nghiem_text: str) -> str:
-    """
-    Tach chinh xac cum chuc danh tu cau kinh_nghiem, vi du:
-    "...hien dang dam nhiem vi tri Truong phong." -> "Truong phong"
-    Dung chung logic voi lay_chuc_vu() trong rss_personalize_gemini.py.
-    """
     match = re.search(r"đảm nhiệm vị trí (.+?)\.", kinh_nghiem_text or "")
     return match.group(1).strip() if match else ""
 
-# 4 khuon cau truc khac nhau cho mo_ta_chung, moi profile duoc gan ngau nhien 1 khuon
-# (chon ngau nhien bang code, KHONG de LLM tu chon, vi LLM luon hoi tu ve 1 kieu quen thuoc)
 CAU_TRUC_MO_TA = [
     {
         "ten": "to_chuc_kinh_nghiem_truoc",
@@ -86,7 +79,6 @@ CAU_TRUC_MO_TA = [
     },
 ]
 
-# cac cum tu bi lam dung qua nhieu, can tranh lap lai
 CUM_TU_HAN_CHE = [
     "với bề dày", "hiện đang", "hiện nay", "vị trí này", "chuyên gia này",
     "cán bộ này", "sở hữu",
@@ -94,7 +86,6 @@ CUM_TU_HAN_CHE = [
 
 
 def chon_khuon_mo_ta(profile_id: str) -> dict:
-    """Chon 1 khuon cau truc co dinh theo id, de tai lap duoc ket qua khi chay lai."""
     rng = random.Random(profile_id)
     return rng.choice(CAU_TRUC_MO_TA)
 

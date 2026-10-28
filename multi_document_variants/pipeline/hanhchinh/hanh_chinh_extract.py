@@ -5,15 +5,12 @@ import docx
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-# ==== CÁC HẰNG SỐ CẤU HÌNH ====
 
-# từ khóa để nhận diện đoạn có khả năng liên quan tới đối tượng thi hành
 TU_KHOA_DOI_TUONG = [
     "Kính gửi", "Nơi nhận", "chịu trách nhiệm thi hành",
     "yêu cầu", "Sở", "UBND", "Chủ tịch", "Chánh Văn phòng",
     "Giám đốc", "Trưởng ban", "Ban Quản lý"
 ]
-# các cụm từ tương đương "chịu trách nhiệm thi hành" hay gặp trong Quyết định
 CUM_TU_THI_HANH = [
     "chịu trách nhiệm thi hành",
     "có trách nhiệm thi hành",
@@ -42,18 +39,13 @@ def _la_doan_phan_cong(text):
     phan_dau_cau = phan_can_kiem_tra[:SO_KY_TU_TIM_TU_KHOA_PHAN_CONG]
     return any(tk in phan_dau_cau for tk in TU_KHOA_PHAN_CONG)
 
-# số từ tối đa để coi 1 đoạn là "đoạn ngắn kiểu liệt kê" (dùng cho Kính gửi)
 SO_TU_TOI_DA_DOAN_NGAN = 20
 
-# số từ tối thiểu để loại các dòng bold ngắn kiểu "Nơi nhận:", "CHỦ TỊCH"
-# ra khỏi danh sách heading giả
 SO_TU_TOI_THIEU_HEADING_GIA = 3
 
 
-# ==== BƯỚC 1: XÁC ĐỊNH LOẠI VĂN BẢN ====
 
 def xac_dinh_loai_van_ban(doc):
-    # ưu tiên 1: kiểm tra bảng quốc hiệu đầu tiên, chỉ khi đúng 1 dòng
     if len(doc.tables) > 0:
         bang_dau = doc.tables[0]
         if len(bang_dau.rows) == 1:
@@ -66,7 +58,6 @@ def xac_dinh_loai_van_ban(doc):
             if loai is not None:
                 return loai
 
-    # ưu tiên 2: quét danh sách heading, chỉ nhận heading BẮT ĐẦU BẰNG từ khóa
     danh_sach_heading = lay_danh_sach_heading(doc)
     for h in danh_sach_heading[:20]:
         text_upper = h["text"].strip().upper()
@@ -74,11 +65,6 @@ def xac_dinh_loai_van_ban(doc):
         if loai is not None:
             return loai
 
-    # ưu tiên 2.5: một số văn bản để tên loại văn bản đứng riêng 1 dòng,
-    # không in đậm nên không lọt vào danh sách heading (VD: KH-292 có
-    # dòng "KẾ HOẠCH" đứng riêng, tách biệt khỏi tên kế hoạch phía dưới).
-    # Chỉ quét đoạn RẤT NGẮN (dưới 15 ký tự) để chắc chắn đây là dòng
-    # đứng riêng ghi tên loại văn bản, không phải câu trích dẫn.
     for p in doc.paragraphs[:15]:
         text = p.text.strip()
         if not text or len(text) > 15:
@@ -87,7 +73,6 @@ def xac_dinh_loai_van_ban(doc):
         if loai is not None:
             return loai
 
-    # ưu tiên 3: riêng công văn, trích yếu "V/v..." thường không phải heading
     for p in doc.paragraphs[:15]:
         text = p.text.strip()
         if not text:
@@ -136,16 +121,8 @@ def _tim_tu_khoa_theo_kieu_bat_dau(text_upper):
     return None
 
 
-# ==== BƯỚC 2: LẤY DANH SÁCH HEADING (CÓ FALLBACK) ====
 
 def doan_la_heading(paragraph):
-    """
-    Kiểm tra 1 đoạn có phải heading không, có 3 trường hợp:
-    1. Style tên có chữ "Heading" (heading chuẩn của Word)
-    2. Style tên có chữ "Tiêu đề" (heading tự đặt tên, gặp ở văn bản dùng
-       custom style như PL01)
-    3. Cả đoạn in đậm (bold) nhưng style vẫn là Normal -> heading giả
-    """
     ten_style = paragraph.style.name
 
     if "Heading" in ten_style:
@@ -154,8 +131,6 @@ def doan_la_heading(paragraph):
     if "Tiêu đề" in ten_style:
         return True, "heading_custom_style"
 
-    # heading giả: toàn bộ run đều bold, và số từ đủ dài
-    # (loại bỏ mấy dòng ngắn kiểu "Nơi nhận:", "CHỦ TỊCH")
     if paragraph.runs:
         tat_ca_bold = all(r.bold for r in paragraph.runs if r.text.strip())
         so_tu = len(paragraph.text.split())
@@ -166,10 +141,6 @@ def doan_la_heading(paragraph):
 
 
 def lay_danh_sach_heading(doc):
-    """
-    Duyệt toàn bộ đoạn văn, trả về danh sách các đoạn được coi là heading,
-    kèm theo vị trí (index) và loại heading để sau này dễ debug.
-    """
     ket_qua = []
     for i, p in enumerate(doc.paragraphs):
         if not p.text.strip():
@@ -184,23 +155,12 @@ def lay_danh_sach_heading(doc):
     return ket_qua
 
 
-# ==== BƯỚC 3: TÁCH ĐOẠN NẾU 1 ĐOẠN CHỨA NHIỀU MỤC SỐ ====
 
 def tach_doan_neu_gop_nhieu_muc(text):
-    """
-    Một số đoạn bị gộp nhiều mục số vào chung 1 paragraph, ví dụ:
-    "5. Tiếp tục triển khai... 5.1. Trong quá trình..."
-    Hàm này cố gắng tách ra thành list các mục con dựa theo pattern số thứ tự.
-
-    Lưu ý: đây là xử lý best-effort bằng regex, không chắc đúng 100% với
-    mọi trường hợp, nên sau khi tách cần người kiểm tra lại thủ công.
-    """
-    # pattern bắt các vị trí bắt đầu 1 mục số kiểu "5." hoặc "5.1."
     pattern = re.compile(r"(?<!\d)(\d{1,2}(?:\.\d{1,2})?\.)\s")
     vi_tri_bat_dau = [m.start() for m in pattern.finditer(text)]
 
     if len(vi_tri_bat_dau) <= 1:
-        # không tách được hoặc chỉ có 1 mục, trả nguyên văn
         return [text]
 
     danh_sach_doan = []
@@ -214,20 +174,12 @@ def tach_doan_neu_gop_nhieu_muc(text):
     return danh_sach_doan
 
 
-# ==== BƯỚC 4: TRÍCH ĐỐI TƯỢNG THI HÀNH THEO TỪNG LOẠI VĂN BẢN ====
 
 def trich_doi_tuong_chi_thi(doc):
-    """
-    Chỉ thị: đối tượng thi hành thường nằm ngay ở Heading 1 đầu văn bản,
-    và rải rác trong các đoạn Normal có chứa từ khóa (Sở, UBND...).
-    Không lấy lại đoạn đã lấy làm heading, và dừng quét khi gặp khối
-    "Nơi nhận" (không phải đối tượng thi hành, chỉ là nơi lưu/gửi).
-    """
     ket_qua = []
-    text_da_lay = set()  # để dedupe, so sánh theo text đã chuẩn hóa
+    text_da_lay = set()
     danh_sach_heading = lay_danh_sach_heading(doc)
 
-    # lấy heading 1 đầu tiên coi như đối tượng thi hành chính
     text_heading_dau_bai = None
     for h in danh_sach_heading:
         if h["loai_heading"] == "heading_chuan":
@@ -236,23 +188,18 @@ def trich_doi_tuong_chi_thi(doc):
             text_da_lay.add(text_heading_dau_bai)
             break
 
-    # quét thêm các đoạn Normal có từ khóa liên quan
     for p in doc.paragraphs:
         text = p.text.strip()
         if not text:
             continue
 
-        # dừng quét khi gặp khối "Nơi nhận" - phần còn lại của văn bản
-        # (nơi nhận, chữ ký...) không phải đối tượng thi hành
         if text.startswith("Nơi nhận"):
             break
 
-        # bỏ qua nếu trùng với heading đã lấy ở trên
         if text in text_da_lay:
             continue
 
         if any(tk in text for tk in TU_KHOA_DOI_TUONG):
-            # có thể đoạn này gộp nhiều mục số, thử tách ra trước
             cac_doan_con = tach_doan_neu_gop_nhieu_muc(text)
             for doan_con in cac_doan_con:
                 doan_con_strip = doan_con.strip()
@@ -267,7 +214,6 @@ def trich_doi_tuong_thong_bao(doc):
     ket_qua = []
     danh_sach_doan = doc.paragraphs
 
-    # trích yếu: đoạn bắt đầu bằng "Về việc" trong 15 đoạn đầu
     for p in danh_sach_doan[:15]:
         text = p.text.strip()
         if not text:
@@ -276,7 +222,6 @@ def trich_doi_tuong_thong_bao(doc):
             ket_qua.append({"nguon": "trich_yeu", "text": text})
             break
 
-    # "Kính gửi:" - lấy nguyên cả đoạn vì đối tượng nằm chung dòng này
     for p in danh_sach_doan:
         text = p.text.strip()
         if not text:
@@ -285,7 +230,6 @@ def trich_doi_tuong_thong_bao(doc):
             ket_qua.append({"nguon": "kinh_gui", "text": text})
             break
 
-    # quét phần nội dung còn lại, dừng khi gặp khối "Nơi nhận"
     for p in danh_sach_doan:
         text = p.text.strip()
         if not text:
@@ -306,8 +250,6 @@ def trich_doi_tuong_cong_van(doc):
     ket_qua = []
     danh_sach_doan = doc.paragraphs
 
-    # tìm trích yếu "V/v..." trong 15 đoạn đầu, thêm vào trước tiên
-    # để LLM có ngữ cảnh chủ đề công văn khi khớp ngành
     for p in danh_sach_doan[:15]:
         text = p.text.strip()
         if not text:
@@ -323,11 +265,8 @@ def trich_doi_tuong_cong_van(doc):
             break
 
     if vi_tri_kinh_gui is None:
-        # không tìm thấy Kính gửi, coi như văn bản không theo mẫu chuẩn
         return ket_qua
 
-    # gom các đoạn ngắn ngay sau "Kính gửi:" cho đến khi gặp đoạn dài
-    # (đoạn dài là dấu hiệu đã sang phần nội dung chính)
     for p in danh_sach_doan[vi_tri_kinh_gui + 1:]:
         text = p.text.strip()
         if not text:
@@ -380,10 +319,6 @@ def trich_doi_tuong_ke_hoach(doc):
             da_lay_trich_yeu = True
             break
 
-    # fallback: một số văn bản (VD: KH-292) để tên loại văn bản "KẾ HOẠCH"
-    # đứng riêng 1 dòng, không in đậm nên không lọt vào danh_sach_heading.
-    # Trong trường hợp đó, heading_chuan đầu tiên sau bảng quốc hiệu
-    # (vi_tri != 0) chính là tên kế hoạch thật, lấy làm trich_yeu.
     if not da_lay_trich_yeu:
         for h in danh_sach_heading[:10]:
             if h["vi_tri"] == 0:
@@ -397,8 +332,6 @@ def trich_doi_tuong_ke_hoach(doc):
         if h["loai_heading"] == "heading_chuan" and "Giao" in h["text"]:
             ket_qua.append({"nguon": "heading_to_chuc_thuc_hien", "text": h["text"]})
 
-    # câu phân công nhiệm vụ cụ thể theo từng cơ quan, nằm rải rác trong
-    # đoạn văn thường (vd "Sở Y tế chủ trì phát triển y tế cơ sở.")
     ket_qua.extend(trich_doi_tuong_phan_cong_trong_doan(doc))
 
     for p in doc.paragraphs:
@@ -416,8 +349,6 @@ def trich_doi_tuong_ke_hoach(doc):
 def trich_doi_tuong_quyet_dinh(doc):
     ket_qua = []
 
-    # trích yếu dạng 1: dòng riêng "Về việc..." ngay sau tiêu đề "QUYẾT ĐỊNH"
-    # (giống cấu trúc Thông báo)
     da_lay_trich_yeu = False
     for p in doc.paragraphs[:15]:
         text = p.text.strip()
@@ -428,8 +359,6 @@ def trich_doi_tuong_quyet_dinh(doc):
             da_lay_trich_yeu = True
             break
 
-    # trích yếu dạng 2: gộp chung trong heading "QUYẾT ĐỊNH Về việc..."
-    # (giống cấu trúc Báo cáo/Kế hoạch)
     if not da_lay_trich_yeu:
         danh_sach_heading = lay_danh_sach_heading(doc)
         for h in danh_sach_heading[:10]:
@@ -459,7 +388,6 @@ def trich_doi_tuong_phu_luc(doc):
         if not text:
             continue
         if "Phạm vi điều chỉnh" in text or "Đối tượng áp dụng" in text:
-            # lấy luôn 2 đoạn ngay sau để có thêm ngữ cảnh
             doan_ke_tiep = doc.paragraphs[i + 1:i + 3]
             text_them = " ".join(pp.text.strip() for pp in doan_ke_tiep if pp.text.strip())
             ket_qua.append({
@@ -494,7 +422,6 @@ def trich_doi_tuong_thi_hanh(doc, loai_van_ban):
     return trich_doi_tuong_phu_luc(doc)
 
 
-# ==== BƯỚC 5: TRÍCH BẢNG (CÓ XỬ LÝ MERGE Ô ĐẦU BẢNG) ====
 
 def trich_bang(doc):
     ket_qua = []
@@ -507,8 +434,6 @@ def trich_bang(doc):
             hang_dau = table.rows[0].cells
             da_them = set()
             for cell in hang_dau:
-                # cell._tc là ô XML thật, nếu 2 cell cùng trỏ 1 ô thật
-                # nghĩa là bị merge, chỉ lấy 1 lần
                 dinh_danh_o = id(cell._tc)
                 if dinh_danh_o in da_them:
                     continue
@@ -524,7 +449,6 @@ def trich_bang(doc):
 
     return ket_qua
 
-# ==== BƯỚC 5.5: TRÍCH TOÀN BỘ NỘI DUNG VĂN BẢN THEO MỤC (PHỤC VỤ TÓM TẮT) ====
 
 def trich_toan_bo_noi_dung_theo_muc(doc):
     danh_sach_muc = []
@@ -611,8 +535,6 @@ def danh_dau_muc_lien_quan(danh_sach_muc, doi_tuong_thi_hanh):
 
         for idx_dt, dt in enumerate(doi_tuong_thi_hanh):
             if dt.get("nguon") == "chu_de_toan_van_ban":
-                # đối tượng có phạm vi TOÀN VĂN BẢN (vd chủ đề Báo cáo) -
-                # áp dụng cho MỌI mục, không cần so khớp substring
                 muc["chi_so_doi_tuong_lien_quan"].append(idx_dt)
                 continue
 
@@ -623,7 +545,6 @@ def danh_dau_muc_lien_quan(danh_sach_muc, doi_tuong_thi_hanh):
 
     return danh_sach_muc
 
-# ==== BƯỚC 6: HÀM CHẠY CHÍNH CHO 1 FILE ====
 
 def xu_ly_1_file(duong_dan_file):
     doc = docx.Document(duong_dan_file)
@@ -654,9 +575,6 @@ def xu_ly_1_file(duong_dan_file):
 
 
 def in_ket_qua_ra_man_hinh(ket_qua):
-    """
-    In kết quả ra màn hình dạng dễ đọc, không cần mở file JSON.
-    """
     print(f"\n========== {ket_qua['file']} ==========")
     print(f"Loại văn bản xác định: {ket_qua['loai_van_ban']}")
 

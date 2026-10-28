@@ -53,21 +53,8 @@ CLOSING_STYLES_CHINH_LUAN = [
     "Kết bằng một câu khẳng định dứt khoát đúng tinh thần kết luận/lời kêu gọi của tác giả, KHÔNG thêm bất kỳ khuyến nghị, đề xuất hay gợi ý hành động/theo dõi nào ngoài nội dung đó.",
 ]
 
-# ==== BUOC 1: XAC DINH STYLE THEO CHU_DE CUA PERSONA ====
 
 def xac_dinh_style(persona: dict, genre: str, genre_score: float) -> str:
-    """
-    So genre cua bai (da cham diem boi classify_genre_rss) voi danh sach
-    chu_de cua persona (chu_de[0] la chu de uu tien hang dau, chu_de[1:] la
-    chu de phu - xem pick_chu_de() trong generate_state_profiles.py).
-
-    Tra ve 1 trong 3 style, DONG BO ten voi style cua hanh_chinh_personalize_gemini.py
-    de giu schema thong nhat trong dataset cuoi, nhung y nghia van phong chi
-    con 2 nhom hanh vi (xem STYLE_INSTRUCTIONS ben duoi):
-    - "chuyen_sau": genre khop dung chu_de[0] va dat nguong tin cay
-    - "khong_chuyen_mon": genre khop 1 trong cac chu_de phu (chu_de[1:])
-    - "binh_thuong": genre khong khop chu_de nao cua persona
-    """
     chu_de_list = persona.get("chu_de", [])
     if not chu_de_list or genre_score < NGUONG_KHOP_GENRE:
         return "binh_thuong"
@@ -79,10 +66,6 @@ def xac_dinh_style(persona: dict, genre: str, genre_score: float) -> str:
     return "binh_thuong"
 
 
-# ==== BUOC 2: TEXT HUONG DAN VAN PHONG THEO STYLE ====
-# Chi 2 nhom hanh vi thuc su (chuyen nghiep / de hieu), "binh_thuong" dung
-# chung huong dan voi "khong_chuyen_mon" nhung nhan manh them yeu cau don
-# gian hoa toi da vi hoan toan ngoai chuyen mon cua persona.
 
 STYLE_INSTRUCTIONS = {
     "chuyen_sau": (
@@ -119,7 +102,6 @@ LOAI_CHINH_LUAN_HIEN_THI = {
 }
 
 
-# ==== BUOC 2b: XAC DINH DINH DANG (DAY DU vs VAO THANG VAN DE) ====
 NGUONG_KINH_NGHIEM_TRANG_TRONG = 25
 
 
@@ -129,12 +111,9 @@ def lay_so_nam_kinh_nghiem(kinh_nghiem_text: str) -> int:
 
 
 def can_van_phong_day_du_chinh_luan(persona: dict, genre: str, loai_chinh_luan: str) -> bool:
-    # Xa luan la the loai chinh thuc, dinh huong - luon dung van phong trang
-    # trong day du (tieu de + mo-than-ket) bat ke persona la ai.
     if loai_chinh_luan == "xa_luan":
         return True
 
-    # Binh luan - phe phan linh hoat hon theo persona, giu logic cu.
     chuc_vu = lay_chuc_vu(persona.get("kinh_nghiem", "")).lower()
     if any(kw in chuc_vu for kw in CHUC_VU_LANH_DAO_KEYWORDS):
         return True
@@ -147,7 +126,6 @@ def can_van_phong_day_du_chinh_luan(persona: dict, genre: str, loai_chinh_luan: 
 
     return False
 
-# ==== BUOC 3: DUNG PROMPT ====
 
 def _dinh_dang_danh_sach_luan_diem(phan_tich: dict) -> str:
     danh_sach = phan_tich.get("danh_sach_luan_diem", [])
@@ -208,7 +186,6 @@ def _dinh_dang_bo_cuc(persona: dict, genre: str, van_de: str, loai_chinh_luan: s
 
 
 def build_chinh_luan_prompt(persona: dict, bai: dict, style: str, genre: str) -> tuple:
-    """Tra ve (prompt, day_du) - day_du duoc tra ve them de luu vao ket qua output."""
     loai = bai.get("loai_chinh_luan", "khac")
     loai_hien_thi = LOAI_CHINH_LUAN_HIEN_THI.get(loai, "chính luận")
     phan_tich = bai.get("phan_tich_lap_luan", {})
@@ -305,7 +282,6 @@ def build_chinh_luan_prompt(persona: dict, bai: dict, style: str, genre: str) ->
     return prompt, day_du
 
 
-# ==== BUOC 3b: HAU KIEM DO BAO PHU LUAN DIEM (Python-only, khong goi LLM) ====
 
 _TU_DUNG_CHUNG_LUAN_DIEM = {
     "và", "của", "cho", "các", "là", "trong", "với", "để", "những",
@@ -316,13 +292,6 @@ SO_LAN_THU_LAI_KIEM_TRA_LUAN_DIEM = 1
 
 
 def _luan_diem_nghi_thieu(summary: str, danh_sach_luan_diem: list, nguong_ty_le: float = 0.25) -> list:
-    """
-    Kiem tra tho (khong dung LLM): voi moi luan diem, trich cac tu noi dung
-    (>=5 ky tu, bo tu dung chung) roi xem ty le tu xuat hien trong summary.
-    Neu ty le duoi nguong -> nghi ngo luan diem do bi bo sot/luoc qua manh.
-    Tra ve danh sach so thu tu (1-based, khop voi danh_sach_luan_diem) bi nghi thieu.
-    Day la kiem tra tho de bao hieu can_soat_tay, KHONG tu dong danh gia dat/rot.
-    """
     summary_lower = summary.lower()
     chi_so_nghi_thieu = []
     for i, luan_diem in enumerate(danh_sach_luan_diem, start=1):
@@ -337,23 +306,14 @@ def _luan_diem_nghi_thieu(summary: str, danh_sach_luan_diem: list, nguong_ty_le:
     return chi_so_nghi_thieu
 
 _RE_TIEN_TO_DOAN = re.compile(r"\[ĐOẠN \d+\]\s*")
-# ==== BUOC 3c: HAU KIEM THUAT NGU CHUA GIAI THICH (chi ap dung khi style != "chuyen_sau") ====
 
 _RE_ACRONYM = re.compile(r"\b[A-Z]{2,6}\b")
 _RE_ROMAN_NUMERAL = re.compile(r"^[IVXLCDM]+$")
 
-# Cac tu viet hoa ngan nhung KHONG phai acronym can giai thich (so thu tu La
-# Ma trong ten Dai hoi/khoa se bi regex bat nham, loai truoc o day cho gon
-# thay vi check roman numeral runtime nhieu lan cho cung 1 tu quen thuoc).
 _NGOAI_LE_ACRONYM = {"XII", "XIII", "XIV", "XV", "XVI"}
 
 
 def _trich_tieu_de(summary: str) -> tuple:
-    """
-    Tach dong tieu de (neu co, dang **...** o dong dau) ra rieng - tieu de
-    thuong viet hoa toan bo nen de bi regex acronym bat nham, khong phai
-    thuat ngu can giai thich.
-    """
     dong_list = summary.split("\n", 1)
     if dong_list and dong_list[0].strip().startswith("**") and dong_list[0].strip().endswith("**"):
         phan_con_lai = dong_list[1] if len(dong_list) > 1 else ""
@@ -362,16 +322,6 @@ def _trich_tieu_de(summary: str) -> tuple:
 
 
 def _thuat_ngu_chua_giai_thich(summary: str, style: str) -> list:
-    """
-    Heuristic (khong dung LLM): tim cac cum viet tat 2-6 chu hoa lien tiep
-    (vi du AIPA, IPU, RSF...) trong phan than bai (da bo tieu de), roi kiem
-    tra xem TOAN BO summary co xuat hien giai thich dang ngoac don gan
-    acronym do khong (ca 2 chieu: "Ten day du (ACR)" hoac "ACR (giai thich)").
-    Chi ap dung khi style yeu cau giai thich thuat ngu (khong_chuyen_mon,
-    binh_thuong) - style "chuyen_sau" khong bi kiem vi khong bat buoc giai
-    thich. Tra ve danh sach acronym NGHI chua duoc giai thich o dau ca, chi
-    de bao hieu can_soat_tay, KHONG tu dong sua/loai bo.
-    """
     if style == "chuyen_sau":
         return []
 
@@ -473,10 +423,6 @@ async def tom_tat_chinh_luan_cho_persona(persona: dict, bai: dict, client, semap
     }
 
 
-# ==== BUOC 3c: TU CHAY EXTRACT + PHAN TICH LAP LUAN (CO CACHE), GIONG PATTERN HANH CHINH ====
-# Hanh chinh cache theo ten_file_goc (docx). Chinh luan khong doc docx ma doc
-# 1 file JSON crawl RSS chua nhieu bai, nen cache o day duoc khoa theo bai_id
-# thay vi ten file - moi bai 1 file cache rieng trong 2 thu muc duoi day.
 
 EXTRACT_CACHE_DIR = "output/chinh_luan/profile_variant/extracted"
 PHAN_TICH_CACHE_DIR = "output/chinh_luan/profile_variant/phan_tich_lap_luan/tung_bai"
@@ -484,11 +430,6 @@ PHAN_TICH_CACHE_DIR = "output/chinh_luan/profile_variant/phan_tich_lap_luan/tung
 
 def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client,
                           model_name: str = SUMMARY_MODEL_NAME) -> dict:
-    """
-    Tra ve 1 bai chinh luan da qua ca 2 buoc extract + phan_tich_lap_luan,
-    tu dong chay 2 buoc do neu chua co cache, khong can nguoi dung tu chay
-    chinh_luan_extract.py / chinh_luan_phan_tich_lap_luan_gemini.py thu cong truoc.
-    """
     from pipeline.chinhluan.chinh_luan_extract import xu_ly_mot_bai
     from pipeline.chinhluan.chinh_luan_phan_tich_lap_luan import goi_llm_phan_tich
 
@@ -500,15 +441,12 @@ def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client,
     extract_cache_path = extract_cache_dir / f"{bai_id}.json"
     phan_tich_cache_path = phan_tich_cache_dir / f"{bai_id}.json"
 
-    # da co ca 2 buoc trong cache -> dung luon, khong goi lai LLM
     if phan_tich_cache_path.exists():
         with open(phan_tich_cache_path, encoding="utf-8") as f:
             bai = json.load(f)
         print(f"Đã đọc bài {bai_id} (đã phân tích lập luận) từ cache: {phan_tich_cache_path}")
         return bai
 
-    # buoc 1: extract - cache rieng de doi persona khac cho CUNG bai
-    # khong phai tach doan lai tu file crawl tho
     if extract_cache_path.exists():
         with open(extract_cache_path, encoding="utf-8") as f:
             ket_qua_extract = json.load(f)
@@ -530,8 +468,6 @@ def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client,
         with open(extract_cache_path, "w", encoding="utf-8") as f:
             json.dump(ket_qua_extract, f, ensure_ascii=False, indent=2)
 
-    # buoc 2: phan tich lap luan - co goi LLM nen cache lai rieng, tach biet
-    # voi buoc extract de khong phai goi lai LLM khi doi persona khac
     print(f"Đang phân tích cấu trúc lập luận cho bài {bai_id}...")
     phan_tich = goi_llm_phan_tich(client, ket_qua_extract, model=model_name)
     bai = dict(ket_qua_extract)
@@ -542,7 +478,6 @@ def lay_bai_da_phan_tich(bai_id: str, duong_dan_raw: Path, client,
     return bai
 
 
-# ==== BUOC 5: CLI ====
 
 if __name__ == "__main__":
     from google import genai
@@ -643,7 +578,6 @@ if __name__ == "__main__":
             return
 
         if ket_qua.get("loi"):
-            # không ghi file để không bị "đã tồn tại -> bỏ qua" ở lần chạy sau
             print(f"[{persona['id']}] bỏ qua, không có bản tóm tắt: {ket_qua['loi']}")
             return
 

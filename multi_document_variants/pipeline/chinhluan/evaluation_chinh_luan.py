@@ -156,9 +156,6 @@ async def goi_llm_danh_gia(client, bai: dict, ket_qua_ca_nhan_hoa: dict, semapho
         return {"loi_parse": True, "raw_text": raw}
 
 
-# ==== HAU KIEM: doi chieu voi can_soat_tay tu buoc personalize ====
-# CHI de bao hieu them, KHONG tu dong dao nguoc verdict cua judge - dung
-# nguyen tac "hau_kiem_fail_reasons" da dung ben hanh_chinh.
 
 def hau_kiem(danh_gia: dict, ket_qua_ca_nhan_hoa: dict, so_luan_diem_goc: int) -> list:
     ly_do_can_soat_tay = []
@@ -201,7 +198,6 @@ def tinh_ket_qua_chung(danh_gia: dict) -> bool:
     )
 
 
-# ==== CLI ====
 
 async def chay_danh_gia(bai_id: str, persona_id: str, duong_dan_bai: str, duong_dan_summary: str,
                         duong_dan_output: str, client, semaphore, model: str = SUMMARY_MODEL_NAME):
@@ -257,12 +253,6 @@ async def chay_danh_gia(bai_id: str, persona_id: str, duong_dan_bai: str, duong_
 async def chay_danh_gia_toan_bo_bai(bai_id: str, duong_dan_bai: str, duong_dan_summary: str,
                                     duong_dan_output: str, client, semaphore,
                                     model: str = SUMMARY_MODEL_NAME, bo_qua_da_co: bool = True):
-    """
-    Quet toan bo file <persona_id>.json da co san trong summary/<bai_id>/, chay
-    danh gia cho tung persona. Bo qua persona da co ket qua danh gia truoc do
-    (giong pattern "da ton tai -> bo qua" o CLI cua personalize), tru khi
-    bo_qua_da_co=False.
-    """
     duong_dan_summary_dir = ROOT_DIR / duong_dan_summary / bai_id
     if not duong_dan_summary_dir.exists():
         raise SystemExit(f"Không tìm thấy thư mục tóm tắt {duong_dan_summary_dir}")

@@ -426,8 +426,6 @@ async def cham_1_persona(persona: dict, ket_qua_rss: dict, index_theo_link: dict
 
 
 def in_ket_qua_cham(persona_id: str, cham: dict) -> None:
-    """In nhanh kết quả chấm ra console, kèm tên tiêu chí fail nếu có, để
-    dễ quan sát khi chạy hàng loạt mà không cần mở từng file json."""
     verdict = cham.get("verdict_cuoi")
     if verdict == "DAT":
         print(f" [{persona_id}] ĐẠT cả 6 tiêu chí.")
@@ -465,8 +463,6 @@ if __name__ == "__main__":
 
 
     async def cham_va_ghi(persona_id, client, semaphore, bo_qua_neu_da_cham=True):
-        """Chấm 1 persona rồi ghi file eval. Trả về None nếu bỏ qua, {'verdict_cuoi': 'LOI'} nếu gọi
-        Gemini lỗi (không ghi file, để lần sau chạy lại), còn lại trả về dict kết quả chấm."""
         out_path = EVAL_DIR / f"{persona_id}.json"
         if bo_qua_neu_da_cham and out_path.exists():
             print(f"[{persona_id}] đã chấm rồi, bỏ qua.")
